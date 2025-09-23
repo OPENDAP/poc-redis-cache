@@ -1,4 +1,5 @@
-# Proof of Concept python code using redis for cache control 
+# Proof of Concept Python Code:
+# Using Redis for Cache Control 
 
 ## Notes
 
