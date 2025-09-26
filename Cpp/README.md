@@ -42,7 +42,7 @@ make -j
 ./test_poc_cache_mproc --processes 6 --duration 30 --write-prob 0.20 --key-suffix-chars 4
 ```
 
-Like the python POC code, clean redis and /tmp/??? before each trial.
+Like the python POC code, clean redis and /tmp/poc-cache before each trial.
 
 ### Additions
 
