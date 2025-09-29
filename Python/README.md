@@ -1,38 +1,3 @@
-# Proof of Concept Python Code:
-# Using Redis for Cache Control 
-
-## Notes
-
-### Get a redis Docker image and run it - run the server.
-
-Run the server, but without key/values persisting:
-```bash
-docker run --name redis-server -d -p 6379:6379 redis
-```
-
-Run the redis server and persist key/value pairs across server start/stop cycles:
-```bash
-docker run --name redis-server -d -p 6379:6379 -v redis-data:/data redis redis-server --appendonly yes
-```
-
-### Run the redis client CLI using Docker
-```bash
-docker exec -it redis-server redis-cli
-(redis) idoru-2:poc-cache-control jimg$ docker exec -it redis-server redis-cli
-127.0.0.1:6379> set bar baz
-OK
-127.0.0.1:6379> get bar
-"baz"
-127.0.0.1:6379> KEYS *
-1) "bar"
-2) "foo"
-127.0.0.1:6379> SCAN 0
-1) "0"
-2) 1) "bar"
-   2) "foo"
-127.0.0.1:6379> del foo
-(integer) 1
-```
 
 ### Set up a conda env for redis clients written in python; verify the environment has the redis client.
 

@@ -1,0 +1,5 @@
+Cpp/build/
+Cpp/test_poc_cache_mproc_hiredis
+
+Cpp/redis-plus-plus/build/
+Cpp/redis-plus-plus/install/

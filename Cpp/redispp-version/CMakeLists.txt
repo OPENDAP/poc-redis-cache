@@ -1,12 +1,19 @@
 cmake_minimum_required(VERSION 3.10)
 project(redis_poc_cache_cpp CXX)
 
+# Look for 'find' macros in the 'cmake' dir. jhrg 9/29/25
+# list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find redis-plus-plus (assumes installed system-wide)
-find_package(redis++ REQUIRED) # sometimes named "redis++_static" depending on install
-find_package(hiredis REQUIRED)
+# find_package(redis++ REQUIRED) # sometimes named "redis++_static" depending on install
+# Build redis++ from source here and use -DCMAKE_PREFIX_PATH=/.../poc-redis-cache/Cpp/redis-plus-plus/install
+find_package(PkgConfig REQUIRED)
+
+pkg_check_modules (HIREDIS hiredis)
+# find_package(hiredis REQUIRED)
 
 add_library(redis_poc_cache
 		redis_poc_cache.cpp

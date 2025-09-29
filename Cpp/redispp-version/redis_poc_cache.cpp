@@ -139,7 +139,9 @@ void RedisFileCache::acquire_read(const std::string& key) {
 void RedisFileCache::release_read(const std::string& key) noexcept {
     try {
         std::vector<std::string> keys{ k_readers(key) };
-        r_->evalsha<long long>(sha_read_rel_, keys.begin(), keys.end());
+        std::vector<std::string> argv{ token };
+        r_->evalsha<long long>(sha_read_rel_, keys.begin(), keys.end(),
+                               argv.begin(), argv.end());
     } catch (...) {
         // swallow in noexcept
     }
