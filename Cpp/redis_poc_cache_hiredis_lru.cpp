@@ -2,7 +2,7 @@
 // Created by James Gallagher on 9/29/25.
 //
 
-#include "redis_poc_cache_hiredis.hpp"
+#include "redis_poc_cache_hiredis_lru.hpp"
 
 #include <hiredis/hiredis.h>
 #include <hiredis/async.h>
@@ -11,7 +11,6 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <errno.h>
 
 #include <cstring>
 #include <cstdarg>
@@ -19,6 +18,8 @@
 #include <sstream>
 #include <random>
 #include <iomanip>
+#include <thread>
+#include <cerrno>
 
 static void rc_deleter(redisContext* c) {
     if (c) redisFree(c);

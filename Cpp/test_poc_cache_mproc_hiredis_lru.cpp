@@ -1,7 +1,9 @@
-// test_poc_cache_mproc_hiredis.cpp
-#include "redis_poc_cache_hiredis.hpp"
+// test_poc_cache_mproc_hiredis_lru.cpp
+
+#include "redis_poc_cache_hiredis_lru.hpp"
 #include <hiredis/hiredis.h>
 
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <getopt.h>
