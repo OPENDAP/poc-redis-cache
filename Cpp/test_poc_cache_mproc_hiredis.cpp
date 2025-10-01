@@ -48,6 +48,15 @@ static std::string short_hex(std::mt19937_64& gen, int n) {
     return s;
 }
 
+static long long get_ll(redisContext* rc, const std::string& cmd_fmt, const std::string& key) {
+    redisReply* r = (redisReply*)redisCommand(rc, cmd_fmt.c_str(), key.c_str());
+    if (!r) return 0;
+    std::unique_ptr<redisReply, void(*)(void*)> guard(r, freeReplyObject);
+    if (r->type == REDIS_REPLY_INTEGER) return r->integer;
+    if (r->type == REDIS_REPLY_STRING) try { return std::stoll(std::string(r->str, r->len)); } catch (...) {}
+    return 0;
+}
+
 int worker(const std::string& cache_dir,
            const std::string& ns,
            const std::string& redis_host,
@@ -156,6 +165,7 @@ int main(int argc, char** argv) {
     int read_sleep_ms = 5;
     int write_sleep_ms = 20;
     int key_suffix_chars = 4;
+    int monitor_every_ms = 1000; // parent monitor tick
 
     for (int i=1; i<argc; ++i) {
         if (!strcmp(argv[i], "--processes") && i+1<argc) processes = std::atoi(argv[++i]);
@@ -174,7 +184,7 @@ int main(int argc, char** argv) {
     mkdir(cache_dir.c_str(), 0777);
 
     // Clean test set so runs are independent
-    {
+    //{
         redisContext* rc = redisConnect(redis_host.c_str(), redis_port);
         if (!rc || rc->err) {
             std::cerr << "parent connect error\n";
@@ -187,8 +197,8 @@ int main(int argc, char** argv) {
         }
         std::string keyset = ns + ":keys:set";
         del(rc, keyset);
-        redisFree(rc);
-    }
+        //redisFree(rc);
+    //}
 
     std::vector<pid_t> pids;
     pids.reserve(processes);
@@ -205,11 +215,44 @@ int main(int argc, char** argv) {
         }
     }
 
+    //const std::string total_key = ns + ":idx:total";
+
+    // Simple parent-side monitor loop
+    auto t_start = std::chrono::steady_clock::now();
+    while (true) {
+        // Check if all children have exited (non-blocking)
+        int live = 0;
+        for (auto pid : pids) {
+            int status = 0;
+            pid_t r = waitpid(pid, &status, WNOHANG);
+            if (r == 0) ++live;
+        }
+
+        // Print totals
+        //long long total_bytes = get_ll(rc, "GET %s", total_key);
+        long long nkeys = get_ll(rc, "SCARD %s", keyset);
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::steady_clock::now() - t_start).count();
+
+        std::cout << "[monitor t=" << elapsed
+                  //<< "s] total_bytes=" << total_bytes
+                  << " keys=" << nkeys
+                  // << (max_bytes>0 ? (" cap=" + std::to_string(max_bytes)) : "")
+                  << "\n";
+
+        if (live == 0) break; // all done
+        usleep(monitor_every_ms * 1000);
+    }
+
+#if 0
     int status = 0;
     for (pid_t pid : pids) {
         int s=0;
         waitpid(pid, &s, 0);
         if (!WIFEXITED(s) || WEXITSTATUS(s) != 0) status = 1;
     }
-    return status;
+#endif
+
+    redisFree(rc);
+    return 0;
 }

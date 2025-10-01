@@ -442,9 +442,17 @@ void RedisFileCache::write_bytes_create(const std::string& key, const std::strin
     release_write(key, token);
 
     // ----- NEW: record size + touch LRU + enforce capacity -----
-    long long sz = (long long)data.size();
+    auto sz = (long long)data.size();
     long long ts = now_ms();
     index_add_on_publish(key, sz, ts);
+#if 0
+    try {
+        index_add_on_publish(key, sz, ts);
+    }
+    catch (...) {
+        throw std::runtime_error("index_add_on_publish");
+    }
+#endif
 
     if (max_bytes_ > 0) {
         ensure_capacity(); // best-effort purge loop

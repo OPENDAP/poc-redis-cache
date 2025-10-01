@@ -17,7 +17,7 @@ include_directories(${HIREDIS_INCLUDE_DIR})
 
 # Library (your hiredis-based cache)
 add_library(redis_poc_cache_hiredis
-		redis_poc_cache_hiredis_lru.cpp
+		redis_poc_cache_hiredis.cpp
 )
 target_link_libraries(redis_poc_cache_hiredis
 		${HIREDIS_LIB}
@@ -25,7 +25,7 @@ target_link_libraries(redis_poc_cache_hiredis
 
 # Test / stress executable
 add_executable(test_poc_cache_mproc_hiredis
-		test_poc_cache_mproc_hiredis_lru.cpp
+		test_poc_cache_mproc_hiredis.cpp
 )
 
 target_link_libraries(test_poc_cache_mproc_hiredis
@@ -33,8 +33,26 @@ target_link_libraries(test_poc_cache_mproc_hiredis
 		${HIREDIS_LIB}
 )
 
+# The same cache with LRU eviction
+add_library(redis_poc_cache_hiredis_lru
+		redis_poc_cache_hiredis_lru.cpp
+)
+target_link_libraries(redis_poc_cache_hiredis_lru
+		${HIREDIS_LIB}
+)
+
+# Test / stress executable
+add_executable(test_poc_cache_mproc_hiredis_lru
+		test_poc_cache_mproc_hiredis_lru.cpp
+)
+
+target_link_libraries(test_poc_cache_mproc_hiredis_lru
+		redis_poc_cache_hiredis_lru
+		${HIREDIS_LIB}
+)
+
 # Nice warnings
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-	target_compile_options(redis_poc_cache_hiredis PRIVATE -O2 -Wall -Wextra -Wpedantic)
-	target_compile_options(test_poc_cache_mproc_hiredis PRIVATE -O2 -Wall -Wextra -Wpedantic)
+	target_compile_options(redis_poc_cache_hiredis_lru PRIVATE -O2 -Wall -Wextra -Wpedantic)
+	target_compile_options(test_poc_cache_mproc_hiredis_lru PRIVATE -O2 -Wall -Wextra -Wpedantic)
 endif()

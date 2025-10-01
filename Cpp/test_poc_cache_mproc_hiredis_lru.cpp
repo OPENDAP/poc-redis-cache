@@ -135,9 +135,19 @@ int worker(const std::string& cache_dir,
                 ++wb;
             } catch (const std::system_error& se) {
                 if (se.code().value() == EEXIST) ++we;
-                else ++other;
+                else {
+                    ++other;
+                    std::cerr << "Work write_bytes_create error: " << se.code().value() << '\n';
+                }
+            } catch (const std::runtime_error& re) {
+                ++other;
+                std::cerr << "Work write_bytes_create runtime error: " << re.what() << '\n';
+            } catch (const std::exception& e) {
+                ++other;
+                std::cerr << "Work write_bytes_create exception: " << e.what() << '\n';
             } catch (...) {
                 ++other;
+                std::cerr << "Work write_bytes_create error but who knows why...\n";
             }
             ms_sleep(write_sleep_ms);
         } else {
