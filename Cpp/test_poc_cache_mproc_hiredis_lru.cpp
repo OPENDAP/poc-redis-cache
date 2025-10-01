@@ -233,9 +233,14 @@ int main(int argc, char** argv) {
     // Clean discovery set (so runs are independent)
     const std::string keyset = ns + ":keys:set";
     del(rc, keyset);
+    const std::string z_lru = ns + ":idx:lru";
+    del(rc, z_lru);
+    const std::string h_sizes = ns + ":idx:size";
+    del(rc, h_sizes);
+    const std::string total_key = ns + ":idx:total";
+    del(rc, total_key);
 
     // Monitor keys for reporting
-    const std::string total_key = ns + ":idx:total";
 
     // Spawn workers (fork)
     std::vector<pid_t> pids; pids.reserve(processes);

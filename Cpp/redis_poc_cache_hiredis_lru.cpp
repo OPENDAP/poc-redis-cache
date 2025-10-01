@@ -159,6 +159,23 @@ const char* RedisFileCache::LUA_CAN_EVICT() {
 }
 
 // ------- ctors -------
+#if 0
+RedisFileCache::RedisFileCache(std::string cache_dir,
+                               std::string redis_host,
+                               int redis_port,
+                               int redis_db,
+                               long long lock_ttl_ms,
+                               std::string ns) {
+    RedisFileCache(std::move(cache_dir),
+                   std::move(redis_host),
+                   redis_port,
+                   redis_db,
+                   lock_ttl_ms,
+                   std::move(ns),
+                   0);
+}
+#endif
+#if 0
 RedisFileCache::RedisFileCache(std::string cache_dir,
                                std::string redis_host,
                                int redis_port,
@@ -195,6 +212,7 @@ RedisFileCache::RedisFileCache(std::string cache_dir,
     sha_wl_acq_ = script_load(LUA_WRITE_LOCK_ACQUIRE());
     sha_wl_rel_ = script_load(LUA_WRITE_LOCK_RELEASE());
 }
+#endif
 
 RedisFileCache::RedisFileCache(std::string cache_dir,
                                std::string redis_host,
@@ -221,7 +239,7 @@ RedisFileCache::RedisFileCache(std::string cache_dir,
     rc_.reset(c);
 
     if (redis_db != 0) {
-        // FIXME See above jhrg 9/30/25
+        // FIXME This throws std::runtime_error and if it does, the cache should be invalid. jhrg 9/30/25
         cmd_ll("SELECT %d", redis_db);
     }
 

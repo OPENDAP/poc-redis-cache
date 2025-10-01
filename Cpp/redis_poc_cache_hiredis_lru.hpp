@@ -22,19 +22,12 @@ class RedisFileCache {
 public:
     // NEW: bounded-cache ctor (max_bytes <= 0 => unbounded)
     RedisFileCache(std::string cache_dir,
-                   std::string redis_host,
-                   int redis_port,
-                   int redis_db,
-                   long long lock_ttl_ms,
-                   std::string ns,
-                   long long max_bytes);
-
-    RedisFileCache(std::string cache_dir,
                    std::string redis_host = "127.0.0.1",
                    int redis_port = 6379,
                    int redis_db = 0,
                    long long lock_ttl_ms = 60000,
-                   std::string ns = "poc-cache");
+                   std::string ns = "poc-cache",
+                   long long max_bytes = 0);
 
     // Non-copyable
     RedisFileCache(const RedisFileCache&) = delete;
@@ -71,7 +64,7 @@ private:
     long long max_bytes_{0};
     std::string z_lru_;    // ZSET: key -> last access ms
     std::string h_sizes_;  // HASH: key -> size
-    std::string s_keys_;   // SET : all keys (kept for tests / discovery)
+    std::string s_keys_;   // SET: all keys (kept for tests / discovery)
     std::string k_total_;  // STRING: total bytes
     std::string k_purge_mtx_; // STRING: purger mutex
     std::string sha_can_evict_; // Lua to fence & verify evictability
