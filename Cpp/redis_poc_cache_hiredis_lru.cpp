@@ -3,6 +3,7 @@
 //
 
 #include "redis_poc_cache_hiredis_lru.hpp"
+#include "ScriptManager.h"
 
 #include <hiredis/hiredis.h>
 #include <hiredis/async.h>
@@ -12,8 +13,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include <cstring>
 #include <cstdarg>
+#include <memory>
 #include <vector>
 #include <sstream>
 #include <random>
@@ -58,63 +59,40 @@ std::string RedisFileCache::k_readers(const std::string& key) const {
 }
 
 // ------- Lua sources -------
-const char* RedisFileCache::LUA_READ_LOCK_ACQUIRE() {
-    return R"(
-        local wl = KEYS[1]
-        local rd = KEYS[2]
-        local ttl = tonumber(ARGV[1])
-        if redis.call('EXISTS', wl) == 1 then return 0 end
-        local c = redis.call('INCR', rd)
-        redis.call('PEXPIRE', rd, ttl)
-        return 1
-    )";
-}
-const char* RedisFileCache::LUA_READ_LOCK_RELEASE() {
-    return R"(
-        local rd = KEYS[1]
-        local c = redis.call('DECR', rd)
-        if c <= 0 then redis.call('DEL', rd) end
-        return 1
-    )";
-}
-const char* RedisFileCache::LUA_WRITE_LOCK_ACQUIRE() {
-    return R"(
-        local wl = KEYS[1]
-        local rd = KEYS[2]
-        local token = ARGV[1]
-        local ttl = tonumber(ARGV[2])
-        if redis.call('EXISTS', wl) == 1 then return 0 end
-        local rc = tonumber(redis.call('GET', rd) or "0")
-        if rc > 0 then return -1 end
-        local ok = redis.call('SET', wl, token, 'NX', 'PX', ttl)
-        if ok then return 1 else return 0 end
-    )";
-}
-const char* RedisFileCache::LUA_WRITE_LOCK_RELEASE() {
-    return R"(
-        local wl = KEYS[1]
-        local token = ARGV[1]
-        local cur = redis.call('GET', wl)
-        if cur and cur == token then
-            redis.call('DEL', wl)
-            return 1
-        end
-        return 0
-    )";
-}
+static const char* LUA_READ_LOCK_ACQUIRE = R"(
+    local wl = KEYS[1]; local rd = KEYS[2]; local ttl = tonumber(ARGV[1])
+    if redis.call('EXISTS', wl) == 1 then return 0 end
+    local c = redis.call('INCR', rd); redis.call('PEXPIRE', rd, ttl); return 1
+)";
+static const char* LUA_READ_LOCK_RELEASE = R"(
+    local rd = KEYS[1]; local c = redis.call('DECR', rd)
+    if c <= 0 then redis.call('DEL', rd) end; return 1
+)";
+static const char* LUA_WRITE_LOCK_ACQUIRE = R"(
+    local wl = KEYS[1]; local rd = KEYS[2]; local token = ARGV[1]; local ttl = tonumber(ARGV[2])
+    if redis.call('EXISTS', wl) == 1 then return 0 end
+    local rc = tonumber(redis.call('GET', rd) or "0"); if rc > 0 then return -1 end
+    local ok = redis.call('SET', wl, token, 'NX', 'PX', ttl); if ok then return 1 else return 0 end
+)";
+static const char* LUA_WRITE_LOCK_RELEASE = R"(
+    local wl = KEYS[1]; local token = ARGV[1]; local cur = redis.call('GET', wl)
+    if cur and cur == token then redis.call('DEL', wl); return 1 end; return 0
+)";
+static const char* LUA_CAN_EVICT = R"(
+    local wl=KEYS[1]; local rd=KEYS[2]; local ev=KEYS[3]; local ttl=tonumber(ARGV[1])
+    if redis.call('EXISTS', wl) == 1 then return 0 end
+    local rc = tonumber(redis.call('GET', rd) or "0"); if rc > 0 then return 0 end
+    local ok = redis.call('SET', ev, '1', 'NX', 'PX', ttl); if ok then return 1 else return 0 end
+)";
 
 // ------------------ LRU -----------------
-
-std::string RedisFileCache::k_evict_fence(const std::string& ns, const std::string& key) {
-    return ns + ":lock:evict:" + key;
-}
 
 long long RedisFileCache::now_ms() {
     using namespace std::chrono;
     return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 }
 
-void RedisFileCache::touch_lru(const std::string& key, long long ts_ms) {
+void RedisFileCache::touch_lru(const std::string& key, long long ts_ms) const {
     // ZADD idx:lru ts key
     cmd_ll("ZADD %s %lld %b", z_lru_.c_str(), ts_ms, key.data(), (size_t)key.size());
 }
@@ -139,80 +117,10 @@ long long RedisFileCache::get_total_bytes() const {
     try { return std::stoll(s); } catch (...) { return 0; }
 }
 
-long long RedisFileCache::file_size_bytes(const std::string& p) const {
+long long RedisFileCache::file_size_bytes(const std::string& p) {
     struct stat st{}; if (::stat(p.c_str(), &st)==0 && S_ISREG(st.st_mode)) return st.st_size;
     return 0;
 }
-
-// ----------------- lua for the LRU ----------------
-
-const char* RedisFileCache::LUA_CAN_EVICT() {
-    return R"(
-        -- KEYS[1]=write_lock  KEYS[2]=readers_count  KEYS[3]=evict_fence
-        -- ARGV[1]=ttl_ms
-        if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end
-        local rc = tonumber(redis.call('GET', KEYS[2]) or "0")
-        if rc > 0 then return 0 end
-        local ok = redis.call('SET', KEYS[3], '1', 'NX', 'PX', tonumber(ARGV[1]))
-        if ok then return 1 else return 0 end
-    )";
-}
-
-// ------- ctors -------
-#if 0
-RedisFileCache::RedisFileCache(std::string cache_dir,
-                               std::string redis_host,
-                               int redis_port,
-                               int redis_db,
-                               long long lock_ttl_ms,
-                               std::string ns) {
-    RedisFileCache(std::move(cache_dir),
-                   std::move(redis_host),
-                   redis_port,
-                   redis_db,
-                   lock_ttl_ms,
-                   std::move(ns),
-                   0);
-}
-#endif
-#if 0
-RedisFileCache::RedisFileCache(std::string cache_dir,
-                               std::string redis_host,
-                               int redis_port,
-                               int redis_db,
-                               long long lock_ttl_ms,
-                               std::string ns)
-: cache_dir_(std::move(cache_dir)),
-  ns_(std::move(ns)),
-  ttl_ms_(lock_ttl_ms),
-  rc_(nullptr, rc_deleter)
-{
-    ensure_dir(cache_dir_);
-
-    // connect
-    redisContext* c = redisConnect(redis_host.c_str(), redis_port);
-    if (!c || c->err) {
-        std::string msg = c ? c->errstr : "redisConnect failed";
-        if (c) redisFree(c);
-        throw std::runtime_error("Redis connect error: " + msg);
-    }
-    rc_.reset(c);
-
-    // select DB
-    if (redis_db != 0) {
-        // FIXME This throws std::runtime_error and if it does, the cache should be invalid.
-        //  jhrg 9/30/25
-        long long ok = cmd_ll("SELECT %d", redis_db);
-        (void)ok; // This is bogus.
-    }
-
-    // load scripts
-    sha_rl_acq_ = script_load(LUA_READ_LOCK_ACQUIRE());
-    sha_rl_rel_ = script_load(LUA_READ_LOCK_RELEASE());
-    sha_wl_acq_ = script_load(LUA_WRITE_LOCK_ACQUIRE());
-    sha_wl_rel_ = script_load(LUA_WRITE_LOCK_RELEASE());
-}
-#endif
 
 RedisFileCache::RedisFileCache(std::string cache_dir,
                                std::string redis_host,
@@ -232,37 +140,30 @@ RedisFileCache::RedisFileCache(std::string cache_dir,
     // connect
     redisContext* c = redisConnect(redis_host.c_str(), redis_port);
     if (!c || c->err) {
-        std::string msg = c ? c->errstr : "redisConnect failed";
+        const std::string msg = c ? c->errstr : "redisConnect failed";
         if (c) redisFree(c);
         throw std::runtime_error("Redis connect error: " + msg);
     }
     rc_.reset(c);
 
     if (redis_db != 0) {
-        // FIXME This throws std::runtime_error and if it does, the cache should be invalid. jhrg 9/30/25
         cmd_ll("SELECT %d", redis_db);
     }
 
     // load scripts
-    sha_rl_acq_ = script_load(LUA_READ_LOCK_ACQUIRE());
-    sha_rl_rel_ = script_load(LUA_READ_LOCK_RELEASE());
-    sha_wl_acq_ = script_load(LUA_WRITE_LOCK_ACQUIRE());
-    sha_wl_rel_ = script_load(LUA_WRITE_LOCK_RELEASE());
+    scripts_ = std::make_unique<ScriptManager>(rc_.get());
 
-    sha_can_evict_ = script_load(LUA_CAN_EVICT());
-
-    // index keys
-    z_lru_ = ns_ + ":idx:lru";
-    h_sizes_ = ns_ + ":idx:size";
-    s_keys_ = ns_ + ":keys:set";
-    k_total_ = ns_ + ":idx:total";
-    k_purge_mtx_ = ns_ + ":purge:mutex";
+    scripts_->register_and_load("read_acq",  LUA_READ_LOCK_ACQUIRE);
+    scripts_->register_and_load("read_rel",  LUA_READ_LOCK_RELEASE);
+    scripts_->register_and_load("write_acq", LUA_WRITE_LOCK_ACQUIRE);
+    scripts_->register_and_load("write_rel", LUA_WRITE_LOCK_RELEASE);
+    scripts_->register_and_load("can_evict", LUA_CAN_EVICT);
 }
 
 // ------- hiredis helpers -------
-long long RedisFileCache::cmd_ll(const char* fmt, ...) {
+long long RedisFileCache::cmd_ll(const char* fmt, ...) const {
     va_list ap; va_start(ap, fmt);
-    redisReply* r = (redisReply*)redisvCommand(rc_.get(), fmt, ap);
+    const auto r = static_cast<redisReply *>(redisvCommand(rc_.get(), fmt, ap));
     va_end(ap);
     if (!r) throw std::runtime_error("Redis command failed (NULL reply)");
     std::unique_ptr<redisReply, void(*)(void*)> guard(r, freeReplyObject);
@@ -279,79 +180,38 @@ long long RedisFileCache::cmd_ll(const char* fmt, ...) {
     throw std::runtime_error("Unexpected reply type (int expected)");
 }
 
-std::string RedisFileCache::cmd_s(const char* fmt, ...) {
+std::string RedisFileCache::cmd_s(const char* fmt, ...) const {
     va_list ap; va_start(ap, fmt);
-    redisReply* r = (redisReply*)redisvCommand(rc_.get(), fmt, ap);
+    const auto r = static_cast<redisReply *>(redisvCommand(rc_.get(), fmt, ap));
     va_end(ap);
     if (!r) throw std::runtime_error("Redis command failed (NULL reply)");
     std::unique_ptr<redisReply, void(*)(void*)> guard(r, freeReplyObject);
     if (r->type == REDIS_REPLY_STRING || r->type == REDIS_REPLY_STATUS) {
-        return std::string(r->str, r->len);
+        return {r->str, r->len};
     }
     if (r->type == REDIS_REPLY_NIL) return {};
     throw std::runtime_error("Unexpected reply type (string expected)");
 }
 
-std::string RedisFileCache::script_load(const std::string& script) {
-    redisReply* r = (redisReply*)redisCommand(rc_.get(), "SCRIPT LOAD %b", script.data(), (size_t)script.size());
-    if (!r) throw std::runtime_error("SCRIPT LOAD failed");
-    std::unique_ptr<redisReply, void(*)(void*)> guard(r, freeReplyObject);
-    if (r->type != REDIS_REPLY_STRING) throw std::runtime_error("SCRIPT LOAD bad reply");
-    return std::string(r->str, r->len);
-}
-
-long long RedisFileCache::evalsha_ll(const std::string& sha,
-                                     int nkeys,
-                                     const std::string* keys,
-                                     int nargs,
-                                     const std::string* args)
-{
-    // Construct argv for: EVALSHA sha nkeys key... arg...
-    std::vector<const char*> argv;
-    std::vector<size_t> lens;
-
-    // TODO ADD explicit capture of argv. jhrg 10/2/25
-    auto push = [&](const std::string& s){
-        argv.push_back(s.data());
-        lens.push_back(s.size());
-    };
-
-    std::string nkeys_s = std::to_string(nkeys);
-
-    push("EVALSHA"); push(sha);
-    push(nkeys_s);
-    for (int i=0;i<nkeys;++i) push(keys[i]);
-    for (int i=0;i<nargs;++i) push(args[i]);
-
-    redisReply* rr = (redisReply*)redisCommandArgv(rc_.get(), (int)argv.size(), argv.data(), lens.data());
-    if (!rr) throw std::runtime_error("EVALSHA failed");
-    std::unique_ptr<redisReply, void(*)(void*)> guard(rr, freeReplyObject);
-
-    if (rr->type == REDIS_REPLY_INTEGER) return rr->integer;
-    if (rr->type == REDIS_REPLY_STRING) {
-        try { return std::stoll(std::string(rr->str, rr->len)); }
-        catch (...) { throw std::runtime_error("EVALSHA string->int parse error"); }
-    }
-    if (rr->type == REDIS_REPLY_NIL) return 0;
-    if (rr->type == REDIS_REPLY_STATUS) return 1;
-    throw std::runtime_error("EVALSHA: unexpected reply type");
-}
-
 // ------- locking -------
-void RedisFileCache::acquire_read(const std::string& key) {
-    std::string keys[2] = { k_write(key), k_readers(key) };
-    std::string args[1] = { std::to_string(ttl_ms_) };
-    long long res = evalsha_ll(sha_rl_acq_, 2, keys, 1, args);
+// read acquire
+void RedisFileCache::acquire_read(const std::string& key) const {
+    std::vector<std::string> KEYS{ k_write(key), k_readers(key) };
+    std::vector<std::string> ARGV{ std::to_string(ttl_ms_) };
+    auto res = scripts_->evalsha_ll("read_acq", 2, KEYS, ARGV);
     if (res != 1) throw CacheBusyError("read lock blocked by writer");
 }
-void RedisFileCache::release_read(const std::string& key) noexcept {
+
+void RedisFileCache::release_read(const std::string& key) const noexcept {
     try {
-        std::string keys[1] = { k_readers(key) };
-        evalsha_ll(sha_rl_rel_, 1, keys, 0, nullptr);
+        std::vector<std::string> KEYS{ k_readers(key) };
+        std::vector<std::string> ARGV;
+        scripts_->evalsha_ll("read_rel", 1, KEYS, ARGV);
     } catch (...) {}
 }
 
-std::string RedisFileCache::acquire_write(const std::string& key) {
+// write acquire
+std::string RedisFileCache::acquire_write(const std::string& key) const {
     // random token
     std::random_device rd; std::mt19937_64 g(rd());
     uint64_t a=g(), b=g();
@@ -360,19 +220,27 @@ std::string RedisFileCache::acquire_write(const std::string& key) {
        <<std::setw(16)<<std::setfill('0')<<b;
     std::string token = oss.str();
 
-    std::string keys[2] = { k_write(key), k_readers(key) };
-    std::string args[2] = { token, std::to_string(ttl_ms_) };
-    long long res = evalsha_ll(sha_wl_acq_, 2, keys, 2, args);
-    if (res == 0) throw CacheBusyError("writer lock held by another writer");
+    std::vector<std::string> KEYS{ k_write(key), k_readers(key) };
+    std::vector<std::string> ARGV{ token, std::to_string(ttl_ms_) };
+    auto res = scripts_->evalsha_ll("write_acq", 2, KEYS, ARGV);
+    if (res == 0)  throw CacheBusyError("writer lock held");
     if (res == -1) throw CacheBusyError("readers present");
     return token;
 }
-void RedisFileCache::release_write(const std::string& key, const std::string& token) noexcept {
+
+void RedisFileCache::release_write(const std::string& key, const std::string& token) const noexcept {
     try {
-        std::string keys[1] = { k_write(key) };
-        std::string args[1] = { token };
-        evalsha_ll(sha_wl_rel_, 1, keys, 1, args);
+        std::vector<std::string> KEYS{ k_write(key) };
+        std::vector<std::string> ARGV{ token };
+        scripts_->evalsha_ll("write_rel", 1, KEYS, ARGV);
     } catch (...) {}
+}
+
+bool RedisFileCache::can_evict_now(const std::string& key) const {
+    std::vector<std::string> KEYS{ k_write(key), k_readers(key), k_evict_fence(ns_, key) };
+    std::vector<std::string> ARGV{ "1500" };
+    auto res = scripts_->evalsha_ll("can_evict", 3, KEYS, ARGV);
+    return res == 1;
 }
 
 // ------- public API -------
@@ -490,36 +358,45 @@ void RedisFileCache::ensure_capacity() {
     // mutex auto-expires
 }
 
+/**
+ * Try to evict one file from the cache. This method chooses the victim based
+ * on the LRU data stored in the Redis server. If successful, it will return
+ * the name and size of the 'victim' using the two value-result parameters.
+ *
+ * @param victim Name of the file removed
+ * @param freed number of bytes removed from teh cache
+ * @return true if a file was removed, false otherwise.
+ */
 bool RedisFileCache::try_evict_one(std::string& victim, long long& freed) {
     victim.clear(); freed = 0;
 
     // Oldest (lowest score) by LRU
-    redisReply* r = (redisReply*)redisCommand(rc_.get(),
-        "ZRANGE %s 0 0 WITHSCORES", z_lru_.c_str());
+    const auto r = static_cast<redisReply *>(redisCommand(rc_.get(), "ZRANGE %s 0 0 WITHSCORES", z_lru_.c_str()));
     if (!r) return false;
     std::unique_ptr<redisReply, void(*)(void*)> guard(r, freeReplyObject);
+
     if (r->type != REDIS_REPLY_ARRAY || r->elements < 1) return false;
 
-    std::string key(r->element[0]->str, r->element[0]->len);
+    // This is the key of the file to be removed (i.e., with the lowest LRU score)
+    const std::string key(r->element[0]->str, r->element[0]->len);
 
-    // size lookup
-    redisReply* rs = (redisReply*)redisCommand(rc_.get(),
-        "HGET %s %b", h_sizes_.c_str(), key.data(), (size_t)key.size());
+    // size lookup; see 'sz' below
+    const auto rs = static_cast<redisReply *>(redisCommand(rc_.get(), "HGET %s %b", h_sizes_.c_str(),
+        key.data(), (size_t) key.size()));
     if (!rs) return false;
     std::unique_ptr<redisReply, void(*)(void*)> guards(rs, freeReplyObject);
+
     if (rs->type == REDIS_REPLY_NIL) {
         // index drift; clean LRU entry and continue
         cmd_ll("ZREM %s %b", z_lru_.c_str(), key.data(), (size_t)key.size());
         cmd_ll("SREM %s %b", s_keys_.c_str(), key.data(), (size_t)key.size());
         return false;
     }
-    long long sz = std::stoll(std::string(rs->str, rs->len));
+    // This is the size of the file to remove.
+    const auto sz = std::stoll(std::string(rs->str, rs->len));
 
     // Fence & verify evictable (no readers/writers)
-    std::string keys[3] = { k_write(key), k_readers(key), k_evict_fence(ns_, key) };
-    std::string args[1] = { std::to_string(1500) }; // 1.5s fence
-    long long ok = evalsha_ll(sha_can_evict_, 3, keys, 1, args);
-    if (ok != 1) {
+    if (!can_evict_now(key)) {
         // Nudge LRU to avoid hammering
         touch_lru(key, now_ms());
         return false;
@@ -540,6 +417,35 @@ bool RedisFileCache::try_evict_one(std::string& victim, long long& freed) {
     return true;
 }
 
+/**
+  * Read cached bytes for a key, waiting for an in‑progress writer to finish.
+  *
+  * This is a convenience wrapper around read_bytes() that handles the case
+  * where a concurrent writer holds the write lock. When the underlying read
+  * would fail with CacheBusyError (i.e., a writer is present), this method
+  * will repeatedly retry until either the read succeeds or the timeout is
+  * reached. Between retries, it sleeps for the specified backoff duration.
+  *
+  * Thread-safety and process-safety are managed via Redis-based locks; this
+  * call does not itself hold the write lock and will not block other readers.
+  *
+  * @param key      Cache key to read. Must be a valid cache key accepted by
+  *                 validate_key().
+  * @param out      On success, filled with the value read from the file cache.
+  *                 On failure, its content is unspecified.
+  * @param timeout  Maximum time to wait for the value to become readable. A
+  *                 zero or negative duration performs a single non-blocking
+  *                 attempt.
+  * @param backoff  Sleep duration between retries while the writer is active.
+  *                 Defaults to 10ms. Must be non-negative.
+  * @return true if the value was read successfully within the timeout; false
+  *         if the key does not exist by the timeout or another retriable
+  *         condition prevented a successful read within the allotted time.
+  * @throws std::system_error on non-retriable filesystem or Redis errors
+  *         encountered during read attempts. In particular, ENOENT from the
+  *         final attempt is treated as a non-exceptional false return when it
+  *         represents a missing key rather than a transient condition.
+  */
 bool RedisFileCache::read_bytes_blocking(const std::string& key,
                                          std::string& out,
                                          std::chrono::milliseconds timeout,
@@ -564,6 +470,22 @@ bool RedisFileCache::read_bytes_blocking(const std::string& key,
     }
 }
 
+/**
+ * Write bytes for a key if absent, waiting for conflicting readers/writers.
+ *
+ * This method attempts write_bytes_create(), and if a conflicting reader or
+ * writer holds the lock, it will retry until success or until the timeout is
+ * reached, sleeping for the given backoff between attempts.
+ *
+ * @param key      Cache key to create and write.
+ * @param data     Data to persist for the key.
+ * @param timeout  Maximum time to wait for exclusive access to perform the
+ *                 create + write operation.
+ * @param backoff  Sleep duration between retries. Defaults to 10ms.
+ * @return true if the write operation succeeded within the timeout; false if
+ *          it timed out without completing.
+ * @throws std::system_error on non-retriable filesystem or Redis errors.
+ */
 bool RedisFileCache::write_bytes_create_blocking(const std::string& key,
                                                  const std::string& data,
                                                  std::chrono::milliseconds timeout,
