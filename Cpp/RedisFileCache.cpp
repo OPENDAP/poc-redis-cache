@@ -2,7 +2,7 @@
 // Created by James Gallagher on 9/29/25.
 //
 
-#include "redis_poc_cache_hiredis.hpp"
+#include "RedisFileCache.hpp"
 
 #include <hiredis/hiredis.h>
 #include <hiredis/async.h>
