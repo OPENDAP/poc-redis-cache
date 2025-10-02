@@ -59,5 +59,4 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 	target_compile_options(TestRedisFileCacheLRU PRIVATE -O0 -g3 -Wall -Wextra -Wpedantic)
 	target_compile_options(redis_poc_cache_hiredis PRIVATE -O0 -g3 -Wall -Wextra -Wpedantic)
 	target_compile_options(test_poc_cache_mproc_hiredis PRIVATE -O0 -g3 -Wall -Wextra -Wpedantic)
-
 endif()

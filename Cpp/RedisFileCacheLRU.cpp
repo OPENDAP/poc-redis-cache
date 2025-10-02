@@ -6,7 +6,7 @@
 #include "ScriptManager.h"
 
 #include <hiredis/hiredis.h>
-#include <hiredis/async.h>
+// #include <hiredis/async.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -373,9 +373,12 @@ void RedisFileCache::ensure_capacity() {
  * on the LRU data stored in the Redis server. If successful, it will return
  * the name and size of the 'victim' using the two value-result parameters.
  *
+<<<<<<< HEAD:Cpp/RedisFileCacheLRU.cpp
  * @note I don't see the value in the value-result parameters unless
  * we are going to have an eviction log. jhrg 10/2/25
  *
+=======
+>>>>>>> dc1c311f9771e8d637e80e1a02642855abfb7d16:Cpp/redis_poc_cache_hiredis_lru.cpp
  * @param victim Name of the file removed
  * @param freed number of bytes removed from teh cache
  * @return true if a file was removed, false otherwise.
