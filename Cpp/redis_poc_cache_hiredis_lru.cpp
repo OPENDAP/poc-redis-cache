@@ -310,6 +310,7 @@ long long RedisFileCache::evalsha_ll(const std::string& sha,
     std::vector<const char*> argv;
     std::vector<size_t> lens;
 
+    // TODO ADD explicit capture of argv. jhrg 10/2/25
     auto push = [&](const std::string& s){
         argv.push_back(s.data());
         lens.push_back(s.size());
@@ -463,14 +464,6 @@ void RedisFileCache::write_bytes_create(const std::string& key, const std::strin
     auto sz = (long long)data.size();
     long long ts = now_ms();
     index_add_on_publish(key, sz, ts);
-#if 0
-    try {
-        index_add_on_publish(key, sz, ts);
-    }
-    catch (...) {
-        throw std::runtime_error("index_add_on_publish");
-    }
-#endif
 
     if (max_bytes_ > 0) {
         ensure_capacity(); // best-effort purge loop
