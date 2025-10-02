@@ -240,7 +240,7 @@ int main(int argc, char** argv) {
     const std::string total_key = ns + ":idx:total";
     del(rc, total_key);
 
-    // Single process version, else ... [rest of main]
+    // Kludge for debugging; Single process version, else ... [rest of main]
     if (processes == 0) {
         long long total_bytes = get_ll(rc, "GET %s", total_key);
         long long nkeys = get_ll(rc, "SCARD %s", keyset);
@@ -256,7 +256,7 @@ int main(int argc, char** argv) {
                           write_prob, duration, read_sleep_ms, write_sleep_ms,
                           key_suffix_chars, blocking, max_bytes);
 
-        redisContext* rc = rc_connect(redis_host, redis_port, redis_db);
+        rc = rc_connect(redis_host, redis_port, redis_db);
         if (!rc) return 1;
 
         total_bytes = get_ll(rc, "GET %s", total_key);
