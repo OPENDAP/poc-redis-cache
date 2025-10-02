@@ -249,7 +249,7 @@ bool RedisFileCache::exists(const std::string& key) const {
     return file_exists_(path_for(key));
 }
 
-std::string RedisFileCache::read_bytes(const std::string& key) {
+std::string RedisFileCache::read_bytes(const std::string& key) const {
     validate_key(key);
     auto p = path_for(key);
     acquire_read(key);
@@ -373,12 +373,10 @@ void RedisFileCache::ensure_capacity() {
  * on the LRU data stored in the Redis server. If successful, it will return
  * the name and size of the 'victim' using the two value-result parameters.
  *
-<<<<<<< HEAD:Cpp/RedisFileCacheLRU.cpp
- * @note I don't see the value in the value-result parameters unless
- * we are going to have an eviction log. jhrg 10/2/25
+ * @note To see recent evictions, use the redis cli and:
+ *      LRANGE poc-cache:evict:log 0 10
+ * jhrg 10/2/25
  *
-=======
->>>>>>> dc1c311f9771e8d637e80e1a02642855abfb7d16:Cpp/redis_poc_cache_hiredis_lru.cpp
  * @param victim Name of the file removed
  * @param freed number of bytes removed from teh cache
  * @return true if a file was removed, false otherwise.
@@ -430,6 +428,9 @@ bool RedisFileCache::try_evict_one(std::string& victim, long long& freed) {
     index_remove_on_delete(key, sz);
     victim = key;
     freed = sz;
+
+    cmd_ll("LPUSH %s:evict:log %b", ns_.c_str(), key.data(), (size_t)key.size());
+
     return true;
 }
 

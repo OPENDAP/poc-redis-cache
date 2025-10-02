@@ -48,7 +48,7 @@ public:
     RedisFileCache(const RedisFileCache&) = delete;
     RedisFileCache& operator=(const RedisFileCache&) = delete;
 
-    std::string read_bytes(const std::string& key);
+    std::string read_bytes(const std::string& key) const;
     void write_bytes_create(const std::string& key, const std::string& data);
     bool exists(const std::string& key) const;
 
