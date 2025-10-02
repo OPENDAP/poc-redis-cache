@@ -239,6 +239,8 @@ int main(int argc, char** argv) {
     del(rc, h_sizes);
     const std::string total_key = ns + ":idx:total";
     del(rc, total_key);
+    const std::string evict_log_key = ns + ":evict:log";
+    del(rc, total_key);
 
     // Kludge for debugging; Single process version, else ... [rest of main]
     if (processes == 0) {
