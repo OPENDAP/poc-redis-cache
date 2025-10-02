@@ -1,6 +1,6 @@
 // test_poc_cache_mproc_hiredis_lru.cpp
 
-#include "redis_poc_cache_hiredis_lru.hpp"
+#include "RedisFileCacheLRU.h"
 #include <hiredis/hiredis.h>
 
 #include <sys/stat.h>
@@ -239,6 +239,37 @@ int main(int argc, char** argv) {
     del(rc, h_sizes);
     const std::string total_key = ns + ":idx:total";
     del(rc, total_key);
+
+    // Single process version, else ... [rest of main]
+    if (processes == 0) {
+        long long total_bytes = get_ll(rc, "GET %s", total_key);
+        long long nkeys = get_ll(rc, "SCARD %s", keyset);
+
+        std::cout << "total_bytes=" << total_bytes
+                  << " keys=" << nkeys
+                  << (max_bytes>0 ? (" cap=" + std::to_string(max_bytes)) : "")
+                  << "\n";
+
+        redisFree(rc);
+
+        worker(cache_dir, ns, redis_host, redis_port, redis_db,
+                          write_prob, duration, read_sleep_ms, write_sleep_ms,
+                          key_suffix_chars, blocking, max_bytes);
+
+        redisContext* rc = rc_connect(redis_host, redis_port, redis_db);
+        if (!rc) return 1;
+
+        total_bytes = get_ll(rc, "GET %s", total_key);
+        nkeys = get_ll(rc, "SCARD %s", keyset);
+
+        std::cout << "total_bytes=" << total_bytes
+                  << " keys=" << nkeys
+                  << (max_bytes>0 ? (" cap=" + std::to_string(max_bytes)) : "")
+                  << "\n";
+
+        redisFree(rc);
+        return 0;
+    }
 
     // Monitor keys for reporting
 
