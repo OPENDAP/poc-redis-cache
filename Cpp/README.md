@@ -1,62 +1,27 @@
 
-# Library: RedisFileCache (C++14)
+# Library: RedisFileCache and test code (C++14)
 
-## hiredis version
+There are two versions of the Redis-based file cache, one that uses hiredis 
+in combination with redis-plus-plus and one that uses only hiredis. I dropped
+the redis++ version to eliminate a dependency. 
 
-The files with 'hiredis' in their name use only the hiredis package are easier
-to build but maybe a bit less 'safe' to use.
+The hiredis code has two versions: one that is a plain copy of the Python code
+also in this repo and one that has LRU cache eviction to control cache size.
+The code with the LRU feature is named RedisFileCacheLRU and Test...LRU.
 
-## How to build
+## About the LRU implementation
 
-g++ -std=gnu++14 -O2 -Wall -Wextra -pedantic \
-redis_poc_cache_hiredis.cpp test_poc_cache_mproc_hiredis.cpp \
--lhiredis -o test_poc_cache_mproc_hiredis
+This implementation uses the Redis database to hold information about each key,
+its size and its last-use time. You can look at those keys using the redis-cli.
 
-## How to test
+There is an eviction log that is maintained; you can see that using the redis-cli
+and the command ```LLEN``` and ```LRANGE```. Here's an example:
 
-./test_poc_cache_mproc_hiredis \
---processes 6 --duration 30 --write-prob 0.20 --key-suffix-chars 4
-
-## Post-test cleanup
-
-----
-
-## C++ Version (which requires redis++ and did not build completely)
-
-Features (parity with Python):
-* Single-writer / multi-reader via Redis Lua scripts (atomic).
-* Create-only writes (2nd writer gets std::system_error with EEXIST).
-* Readers increment a Redis counter (with TTL). Writers require zero readers.
-* Writers publish by writing to a temp file then rename(2) atomically.
-* Keys limited to simple file names (no slashes / leading dot) for POC hygiene.
-
-Dependencies
-* redis-plus-plus (and its dependency hiredis)
-* POSIX (Linux/macOS) for open, fsync, rename, etc.
-
-Install (Ubuntu):
-```bash
-sudo apt-get install libhiredis-dev
-```
-or (OSX):
-```bash
-brew install hiredis
+```redis
+LRANGE poc-cache:evict:log 0 10
 ```
 
-Build redis-plus-plus (or install from your package manager if available).
-```bash
-git clone https://github.com/sewenew/redis-plus-plus.git
-```
-For OSX and our software, I configured redis++ as:
-```bash
-cmake -DCMAKE_INSTALL_PREFIX=/path/to/install/redis-plus-plus -DREDIS_PLUS_PLUS_CXX_STANDARD=14 ..
-```
-By default, redis++ builds with C++17 and all the code that links with/against it must also be build using that version.
-To avoid having conflicting versions of redis++ on my machine, I installed it in a local directory.
-See the redis++ install information about other ```cmake``` switches.
-
-
-## Multi-process test: test_poc_cache_mproc.cpp
+## Multi-process test: TestRedisFileCacheLRU
 
 What it does (like the Python harness):
 * Forks N worker processes (not threads).
@@ -65,27 +30,39 @@ What it does (like the Python harness):
 * Lets you dial up collisions by shortening the random suffix length.
 * It uses the same Redis key set name: <namespace>:keys:set (default poc-cache:keys:set).
 
-## Build (CMake) & Run
+
+## Build (CMake) & Run/test
+
+This builds both versions (LRU and plain) and the test drivers for each. This
+will require that the hiredis package be installed and that it be discoverable 
+by cmake.
 
 ### Build
 ```bash
 mkdir build && cd build
-export rpp_prefix=/Users/jimg/src/opendap/hyrax/poc-redis-cache/Cpp/redis-plus-plus/install/
-cmake .. -DCMAKE_VERBOSE_MAKEFILE=on -DCMAKE_CXX_FLAGS=-I$rpp_prefix/include               
-
+cmake ..              
 make -j
 ```
 
 ### Run tests
 
+Here's how to run the test driver for the LRU version. The plain version can be
+run the same way - the max-bytes option will be ignored - or without ```max-bytes```.
+Look at the code to see all the options. 
+
+One notable feature of the LRU test code is that setting ```processes``` to zero will
+for a single process run that is easier to use in a debugger.
+
 ```bash
-./test_poc_cache_mproc --processes 6 --duration 30 --write-prob 0.20 --key-suffix-chars 4
+./TestRedisFileCacheLRU --processes 6 --duration 30 --write-prob 0.20 --key-suffix-chars 4 --max-bytes 2000000
 ```
 
-Like the python POC code, clean redis and /tmp/poc-cache before each trial.
 
-### Additions
+### Test cleanup
 
-See chat for:
-* Blocking acquire helpers with backoff for reads/writes.
-* A size-bounded cache (LRU index + purge policy) that still respects these locks.
+The test drivers (TestRedisFileCacheLRU, ...) will remove various keys from the 
+Redis database. However, you have to clean out the cache directory by hand
+
+```bash
+rm -rf /tmp/poc-cache
+```
