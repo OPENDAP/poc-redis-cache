@@ -5,6 +5,22 @@ project(poc_cache_hiredis CXX)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+option(USE_ASAN "Enable Address Sanitizer" OFF)
+option(BUILD_DEVELOPER "Build in developer mode" OFF)
+
+set(COMMON_WARNINGS -Wall -Wextra -Wpedantic)
+
+if(BUILD_DEVELOPER)
+	set(DEV_FLAGS -g3 -O0 ${COMMON_WARNINGS})
+else()
+	set(DEV_FLAGS -O2 -DNDEBUG ${COMMON_WARNINGS})
+endif()
+
+if(USE_ASAN)
+	list(APPEND DEV_FLAGS -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer)
+	set(ASAN_LINK_FLAGS -fsanitize=address -fsanitize=undefined)
+endif()
+
 # If hiredis isn't in a standard location, set:
 #   cmake -DHiredis_ROOT=/path/to/hiredis/install ..
 find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h)
@@ -55,9 +71,9 @@ target_link_libraries(TestRedisFileCacheLRU
 
 # Nice warnings, debugger friendly
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-	target_compile_options(redis_cache_lru PRIVATE -O0 -g3 -Wall -Wextra -Wpedantic)
-	target_compile_options(TestRedisFileCacheLRU PRIVATE -O0 -g3 -Wall -Wextra -Wpedantic)
+	target_compile_options(redis_cache_lru PRIVATE ${DEV_FLAGS})
+	target_compile_options(TestRedisFileCacheLRU PRIVATE ${DEV_FLAGS})
 
-	target_compile_options(redis_cache PRIVATE -O0 -g3 -Wall -Wextra -Wpedantic)
-	target_compile_options(TestRedisFileCache PRIVATE -O0 -g3 -Wall -Wextra -Wpedantic)
+	target_compile_options(redis_cache PRIVATE ${DEV_FLAGS})
+	target_compile_options(TestRedisFileCache PRIVATE ${DEV_FLAGS})
 endif()
