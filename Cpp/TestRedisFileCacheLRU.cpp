@@ -190,6 +190,112 @@ int worker(const std::string& cache_dir,
     return 0;
 }
 
+// ---------- DEBUG HELPERS ----------
+static void debug_print_total(redisContext* rc, const std::string& total_key) {
+    if (auto* r = (redisReply*)redisCommand(rc, "GET %s", total_key.c_str())) {
+        std::unique_ptr<redisReply, void(*)(void*)> G(r, freeReplyObject);
+        long long total = 0;
+        if (r->type == REDIS_REPLY_STRING) { try { total = std::stoll(std::string(r->str, r->len)); } catch (...) {} }
+        else if (r->type == REDIS_REPLY_INTEGER) { total = r->integer; }
+        std::cout << "  total_bytes=" << total << "\n";
+    }
+}
+
+static void debug_print_sizes(redisContext* rc, const std::string& h_sizes, int top) {
+    if (auto* r = (redisReply*)redisCommand(rc, "HLEN %s", h_sizes.c_str())) {
+        std::unique_ptr<redisReply, void(*)(void*)> G(r, freeReplyObject);
+        long long n = (r->type == REDIS_REPLY_INTEGER) ? r->integer : 0;
+        std::cout << "  sizes.count=" << n << "\n";
+    }
+    // Show a handful using HSCAN
+    std::string cursor = "0";
+    int shown = 0;
+    while (shown < top) {
+        if (auto* r = (redisReply*)redisCommand(rc, "HSCAN %s %s COUNT %d", h_sizes.c_str(), cursor.c_str(), top*2)) {
+            std::unique_ptr<redisReply, void(*)(void*)> G(r, freeReplyObject);
+            if (r->type != REDIS_REPLY_ARRAY || r->elements < 2) break;
+            // next cursor
+            cursor = (r->element[0]->type == REDIS_REPLY_STRING) ? std::string(r->element[0]->str, r->element[0]->len) : "0";
+            // keys/vals array
+            auto* kv = r->element[1];
+            for (size_t i=0; i+1<kv->elements && shown<top; i+=2) {
+                std::string k = (kv->element[i]->type==REDIS_REPLY_STRING) ? std::string(kv->element[i]->str, kv->element[i]->len) : "";
+                std::string v = (kv->element[i+1]->type==REDIS_REPLY_STRING) ? std::string(kv->element[i+1]->str, kv->element[i+1]->len) : "";
+                std::cout << "    size[" << k << "]=" << v << "\n";
+                ++shown;
+            }
+            if (cursor == "0") break;
+        } else break;
+    }
+}
+
+static void debug_print_lru(redisContext* rc, const std::string& z_lru, int top) {
+    // Oldest (head)
+    if (auto* r = (redisReply*)redisCommand(rc, "ZRANGE %s 0 %d WITHSCORES", z_lru.c_str(), top-1)) {
+        std::unique_ptr<redisReply, void(*)(void*)> G(r, freeReplyObject);
+        std::cout << "  lru.oldest:\n";
+        for (size_t i=0; i+1<r->elements; i+=2) {
+            std::string key = (r->element[i]->type==REDIS_REPLY_STRING) ? std::string(r->element[i]->str, r->element[i]->len) : "";
+            std::string score = (r->element[i+1]->type==REDIS_REPLY_STRING) ? std::string(r->element[i+1]->str, r->element[i+1]->len) : "";
+            std::cout << "    " << key << " @ " << score << "\n";
+        }
+    }
+    // Newest (tail)
+    if (auto* r = (redisReply*)redisCommand(rc, "ZREVRANGE %s 0 %d WITHSCORES", z_lru.c_str(), top-1)) {
+        std::unique_ptr<redisReply, void(*)(void*)> G(r, freeReplyObject);
+        std::cout << "  lru.newest:\n";
+        for (size_t i=0; i+1<r->elements; i+=2) {
+            std::string key = (r->element[i]->type==REDIS_REPLY_STRING) ? std::string(r->element[i]->str, r->element[i]->len) : "";
+            std::string score = (r->element[i+1]->type==REDIS_REPLY_STRING) ? std::string(r->element[i+1]->str, r->element[i+1]->len) : "";
+            std::cout << "    " << key << " @ " << score << "\n";
+        }
+    }
+}
+
+static void debug_print_evictions(redisContext* rc, const std::string& ns, int top) {
+    std::string logkey = ns + ":evict:log";
+    if (auto* r = (redisReply*)redisCommand(rc, "LRANGE %s 0 %d", logkey.c_str(), top-1)) {
+        std::unique_ptr<redisReply, void(*)(void*)> G(r, freeReplyObject);
+        std::cout << "  evict.log (most recent first):\n";
+        if (r->type == REDIS_REPLY_ARRAY) {
+            for (size_t i=0; i<r->elements; ++i) {
+                std::string v = (r->element[i]->type==REDIS_REPLY_STRING) ? std::string(r->element[i]->str, r->element[i]->len) : "";
+                std::cout << "    " << v << "\n";
+            }
+        }
+    }
+}
+
+static void debug_print_active_write_locks(redisContext* rc, const std::string& ns, int max_show) {
+    // Show a few write locks with SCAN + MATCH
+    std::string cursor = "0";
+    int shown = 0;
+    std::string pattern = ns + ":lock:write:*";
+    std::cout << "  write_locks:\n";
+    while (shown < max_show) {
+        if (auto* r = (redisReply*)redisCommand(rc, "SCAN %s MATCH %b COUNT %d",
+                                                cursor.c_str(), pattern.data(), (size_t)pattern.size(), 200)) {
+            std::unique_ptr<redisReply, void(*)(void*)> G(r, freeReplyObject);
+            if (r->type != REDIS_REPLY_ARRAY || r->elements < 2) break;
+            cursor = (r->element[0]->type==REDIS_REPLY_STRING) ? std::string(r->element[0]->str, r->element[0]->len) : "0";
+            auto* arr = r->element[1];
+            for (size_t i=0; i<arr->elements && shown<max_show; ++i) {
+                if (arr->element[i]->type == REDIS_REPLY_STRING) {
+                    std::string k(arr->element[i]->str, arr->element[i]->len);
+                    // fetch token
+                    if (auto* r2 = (redisReply*)redisCommand(rc, "GET %b", k.data(), (size_t)k.size())) {
+                        std::unique_ptr<redisReply, void(*)(void*)> G2(r2, freeReplyObject);
+                        std::string token = (r2->type==REDIS_REPLY_STRING) ? std::string(r2->str, r2->len) : "";
+                        std::cout << "    " << k << " token=" << token << "\n";
+                    }
+                    ++shown;
+                }
+            }
+            if (cursor == "0") break;
+        } else break;
+    }
+}
+
 // ------------------ UPDATED MAIN ------------------
 int main(int argc, char** argv) {
     int processes = 4;
@@ -206,6 +312,9 @@ int main(int argc, char** argv) {
     bool blocking = false;
     long long max_bytes = 0; // 0 => unbounded
     int monitor_every_ms = 1000; // parent monitor tick
+    bool debug = false;
+    int  debug_every_ms = 2000;   // how often to print debug info
+    int  debug_top = 10;          // how many items to show for LRU/sizes
 
     for (int i=1; i<argc; ++i) {
         if (!strcmp(argv[i], "--processes") && i+1<argc) processes = std::atoi(argv[++i]);
@@ -222,6 +331,9 @@ int main(int argc, char** argv) {
         else if (!strcmp(argv[i], "--blocking")) blocking = true;
         else if (!strcmp(argv[i], "--max-bytes") && i+1<argc) max_bytes = std::atoll(argv[++i]);
         else if (!strcmp(argv[i], "--monitor-ms") && i+1<argc) monitor_every_ms = std::atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--debug")) debug = true;
+        else if (!strcmp(argv[i], "--debug-interval-ms") && i+1<argc) debug_every_ms = std::atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--debug-top") && i+1<argc) debug_top = std::atoi(argv[++i]);
     }
 
     ::mkdir(cache_dir.c_str(), 0777);
@@ -295,7 +407,10 @@ int main(int argc, char** argv) {
 
     // Simple parent-side monitor loop
     auto t_start = std::chrono::steady_clock::now();
+
+    // ...
     while (true) {
+        // ... existing waitpid/liveness check ...
         // Check if all children have exited (non-blocking)
         int live = 0;
         for (auto pid : pids) {
@@ -304,9 +419,8 @@ int main(int argc, char** argv) {
             if (r == 0) ++live;
         }
 
-        // Print totals
         long long total_bytes = get_ll(rc, "GET %s", total_key);
-        long long nkeys = get_ll(rc, "SCARD %s", keyset);
+        long long nkeys       = get_ll(rc, "SCARD %s", keyset);
         auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
             std::chrono::steady_clock::now() - t_start).count();
 
@@ -316,8 +430,17 @@ int main(int argc, char** argv) {
                   << (max_bytes>0 ? (" cap=" + std::to_string(max_bytes)) : "")
                   << "\n";
 
-        if (live == 0) break; // all done
-        usleep(monitor_every_ms * 1000);
+        if (debug) {
+            std::cout << "DEBUG:\n";
+            debug_print_total(rc, total_key);
+            debug_print_lru(rc, z_lru, debug_top);
+            debug_print_sizes(rc, h_sizes, debug_top);
+            debug_print_evictions(rc, ns, debug_top);
+            debug_print_active_write_locks(rc, ns, /*max_show=*/debug_top);
+        }
+
+        if (live == 0) break;
+        usleep((debug ? debug_every_ms : monitor_every_ms) * 1000);
     }
 
     redisFree(rc);
