@@ -1,14 +1,17 @@
 cmake_minimum_required(VERSION 3.10)
-project(poc_cache_hiredis CXX)
 
 # C++14 (works fine for all code below)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+add_subdirectory(unit-tests)
+
 option(USE_ASAN "Enable Address Sanitizer" OFF)
 option(BUILD_DEVELOPER "Build in developer mode" OFF)
 
-set(COMMON_WARNINGS -Wall -Wextra -Wpedantic)
+# I added -Wno-c99-extensions because hiredis.h triggers that warning.
+# jhrg 10/3/25
+set(COMMON_WARNINGS -Wall -Wextra -Wpedantic -Wno-c99-extensions)
 
 if(BUILD_DEVELOPER)
 	set(DEV_FLAGS -g3 -O0 ${COMMON_WARNINGS})
@@ -41,11 +44,11 @@ target_link_libraries(redis_cache
 )
 
 # Test / stress executable
-add_executable(TestRedisFileCache
-		TestRedisFileCache.cpp
+add_executable(RedisFileCache_Simulator
+		RedisFileCache_Simulator.cpp
 )
 
-target_link_libraries(TestRedisFileCache
+target_link_libraries(RedisFileCache_Simulator
 		redis_cache
 		${HIREDIS_LIB}
 )
@@ -60,11 +63,11 @@ target_link_libraries(redis_cache_lru
 )
 
 # Test / stress executable
-add_executable(TestRedisFileCacheLRU
-		TestRedisFileCacheLRU.cpp
+add_executable(RedisFileCacheLRU_Simulator
+		RedisFileCacheLRU_Simulator.cpp
 )
 
-target_link_libraries(TestRedisFileCacheLRU
+target_link_libraries(RedisFileCacheLRU_Simulator
 		redis_cache_lru
 		${HIREDIS_LIB}
 )
@@ -72,8 +75,8 @@ target_link_libraries(TestRedisFileCacheLRU
 # Nice warnings, debugger friendly
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 	target_compile_options(redis_cache_lru PRIVATE ${DEV_FLAGS})
-	target_compile_options(TestRedisFileCacheLRU PRIVATE ${DEV_FLAGS})
+	target_compile_options(RedisFileCacheLRU_Simulator PRIVATE ${DEV_FLAGS})
 
 	target_compile_options(redis_cache PRIVATE ${DEV_FLAGS})
-	target_compile_options(TestRedisFileCache PRIVATE ${DEV_FLAGS})
+	target_compile_options(RedisFileCache_Simulator PRIVATE ${DEV_FLAGS})
 endif()
