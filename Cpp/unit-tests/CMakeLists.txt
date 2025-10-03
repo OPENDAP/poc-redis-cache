@@ -38,7 +38,7 @@ endfunction()
 # -------- Executable: test_RedisFileCacheLRU --------
 # This test needs both the cache and script manager impls.
 add_executable(test_RedisFileCacheLRU
-        "${TESTS_DIR}/test_RedisFileCacheLRU.cpp"
+        "${TESTS_DIR}/TestRedisFileCacheLRU.cpp"
         "${PARENT_SRC_DIR}/RedisFileCacheLRU.cpp"
         "${PARENT_SRC_DIR}/ScriptManager.cpp"
 )
@@ -60,7 +60,7 @@ apply_warnings(test_RedisFileCacheLRU)
 # -------- Executable: test_ScriptManager --------
 # This test only needs ScriptManager.
 add_executable(test_ScriptManager
-        "${TESTS_DIR}/test_ScriptManager.cpp"
+        "${TESTS_DIR}/TestScriptManager.cpp"
         "${PARENT_SRC_DIR}/ScriptManager.cpp"
 )
 
@@ -80,6 +80,6 @@ apply_warnings(test_ScriptManager)
 
 # -------- Convenience output --------
 message(STATUS "Built tests:")
-message(STATUS "  - test_RedisFileCacheLRU")
-message(STATUS "  - test_ScriptManager")
+message(STATUS "  - TestRedisFileCacheLRU")
+message(STATUS "  - TestScriptManager")
 message(STATUS "Include your CppUnit main header from each test source so 'main()' is present.")
