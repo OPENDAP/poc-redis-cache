@@ -33,46 +33,55 @@ namespace {
 struct RcCloser { void operator()(redisContext* c) const { if (c) redisFree(c); } };
 using RcPtr = std::unique_ptr<redisContext, RcCloser>;
 
+/// Return a unique pointer to a redisConnect object with an open database
+/// @param host Connect to redis on this host (DNS name or TCP/IP address)
+/// @param port Connect using this port
+/// @param db Open this database on the Redis server
 inline RcPtr rc_connect(const std::string& host, int port, int db) {
     redisContext* rc = redisConnect(host.c_str(), port);
     if (!rc || rc->err) {
         if (rc) { fprintf(stderr, "redis err: %s\n", rc->errstr); redisFree(rc); }
-        return RcPtr(nullptr);
+        return {nullptr};
     }
     if (db != 0) {
-        if (auto* r = (redisReply*)redisCommand(rc, "SELECT %d", db)) freeReplyObject(r);
+        if (auto* r = static_cast<redisReply *>(redisCommand(rc, "SELECT %d", db))) freeReplyObject(r);
     }
     // Prefer RESP2 for stable replies
-    if (auto* r = (redisReply*)redisCommand(rc, "HELLO 2")) freeReplyObject(r);
+    if (auto* r = static_cast<redisReply *>(redisCommand(rc, "HELLO 2"))) freeReplyObject(r);
     return RcPtr(rc);
 }
 
+/// Delete all the Redis in the Redis database reference by 'rc' that have the namespace 'ns'
+/// @param rc Open redisConnect object with an associated database
+/// @param ns The namespace of the keys to delete.
 inline void del_namespace(RcPtr& rc, const std::string& ns) {
     std::string cursor = "0";
-    std::string patt = ns + ":*";
+    const std::string patt = ns + ":*";
     do {
-        redisReply* r = (redisReply*)redisCommand(rc.get(), "SCAN %s MATCH %b COUNT 200",
-                                                  cursor.c_str(), patt.data(), (size_t)patt.size());
+        auto* r = static_cast<redisReply *>(redisCommand(rc.get(), "SCAN %s MATCH %b COUNT 200",
+                                                               cursor.c_str(), patt.data(), (size_t) patt.size()));
         if (!r) break;
         std::unique_ptr<redisReply, void(*)(void*)> G(r, freeReplyObject);
         if (r->type != REDIS_REPLY_ARRAY || r->elements < 2) break;
         cursor = (r->element[0]->type==REDIS_REPLY_STRING) ? std::string(r->element[0]->str, r->element[0]->len) : "0";
-        auto* arr = r->element[1];
+        const auto* arr = r->element[1];
         for (size_t i=0; i<arr->elements; ++i) {
             if (arr->element[i]->type == REDIS_REPLY_STRING) {
                 std::string k(arr->element[i]->str, arr->element[i]->len);
-                if (auto* d = (redisReply*)redisCommand(rc.get(), "DEL %b", k.data(), (size_t)k.size()))
+                if (auto* d = static_cast<redisReply *>(redisCommand(rc.get(), "DEL %b", k.data(), (size_t) k.size())))
                     freeReplyObject(d);
             }
         }
     } while (cursor != "0");
 }
 
+/// Return true if the file exists and is a regular file.
 inline bool file_exists(const std::string& p) {
     struct stat st{};
     return ::stat(p.c_str(), &st) == 0 && S_ISREG(st.st_mode);
 }
 
+/// Return a random hex number of 'n' digits. Default is 8 digits.
 inline std::string rand_hex(int n=8) {
     static thread_local std::mt19937_64 gen{std::random_device{}()};
     static const char* hexd="0123456789abcdef";
