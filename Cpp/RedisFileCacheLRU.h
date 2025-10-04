@@ -37,7 +37,7 @@ class RedisFileCache {
 public:
     // bounded-cache ctor (max_bytes <= 0 => unbounded)
     explicit RedisFileCache(std::string cache_dir,
-                   std::string redis_host = "127.0.0.1",
+                   const std::string &redis_host = "127.0.0.1",
                    int redis_port = 6379,
                    int redis_db = 0,
                    long long lock_ttl_ms = 60000,
@@ -66,14 +66,22 @@ public:
     const std::string& namespace_prefix() const { return ns_; }
 
 private:
-    std::string cache_dir_;
-    std::string ns_;
-    long long ttl_ms_;
-    std::unique_ptr<redisContext, void(*)(redisContext*)> rc_;
-    std::string sha_rl_acq_, sha_rl_rel_, sha_wl_acq_, sha_wl_rel_;
-    long long max_bytes_ = 0;
+    std::string cache_dir_; /// Where the files are stored
+    std::string ns_;    /// Redis key Namespace
+    long long ttl_ms_;  /// File lock max lifetime; prevent stale locks
+    long long max_bytes_ = 0; /// How big a cache? 0 == unbounded.
 
-    std::unique_ptr<ScriptManager> scripts_{nullptr};
+    // This controls how often the cache purge actually happens, regardless of how often
+    // new files are added. Make this small for certain tests, etc. (see TestRedisFileCacheLRU.cpp)
+    // jhrg 10/4//25
+    long long purge_mtx_ttl_ms_ = 2000; /// Minimum purge frequency
+
+    std::unique_ptr<redisContext, void(*)(redisContext*)> rc_;  /// The Redis connection
+    std::unique_ptr<ScriptManager> scripts_{nullptr};   /// Manages the LUA scripts
+
+    // setters/getters
+    long long get_purge_mtx_ttl() const { return purge_mtx_ttl_ms_; }
+    void set_purge_mtx_ttl(const long long ttl) { purge_mtx_ttl_ms_ = ttl; }
 
     // index keys
 
@@ -113,6 +121,8 @@ private:
     std::string k_readers(const std::string& key) const;
     static bool file_exists_(const std::string& p);
     static void fsync_fd(int fd);
+
+    friend class RedisFileCacheLRUTest;
 };
 
 #endif //POC_REDIS_CACHE_REDIS_POC_CACHE_HIREDIS_H

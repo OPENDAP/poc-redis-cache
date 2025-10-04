@@ -276,6 +276,29 @@ class RedisFileCacheLRUTest : public CppUnit::TestFixture {
         DBG(std::cerr << std::endl);
     }
 
+    void test_write_busy_when_writer_lock_present() {
+        DBG(std::cerr << __func__ << std::endl);
+        RedisFileCache c(cache_dir, host, port, db, 60000, ns, 0);
+
+        const std::string key = "busy-" + rand_hex(6) + ".bin";
+        const std::string data = "payload";
+        c.write_bytes_create(key, data);
+
+        // Simulate a writer holding the write lock (no readers)
+        const std::string wlock = ns + ":lock:write:" + key;
+        {
+            // NB: PX: set the time to expire in ms; NX: only set the key if it does not exist. jhrg 10/4/25
+            const auto r = static_cast<redisReply *>(redisCommand(rc.get(), "SET %s token PX %d NX", wlock.c_str(), 3000));
+            if (r) freeReplyObject(r);
+        }
+
+        CPPUNIT_ASSERT_THROW_MESSAGE("Attempt to read while write locked should fail", c.read_bytes(key), CacheBusyError);
+
+        // Cleanup simulated lock
+        if (const auto r = static_cast<redisReply *>(redisCommand(rc.get(), "DEL %s", wlock.c_str()))) freeReplyObject(r);
+        DBG(std::cerr << std::endl);
+    }
+
     void test_blocking_writer() {
         DBG(std::cerr << __func__ << std::endl);
         RedisFileCache c(cache_dir, host, port, db, 60000, ns, 0);
@@ -346,6 +369,11 @@ class RedisFileCacheLRUTest : public CppUnit::TestFixture {
         const long long cap = 8 * 1024; // 8 KB
         RedisFileCache c(cache_dir, host, port, db, 60000, ns, cap);
 
+        // This must be << the sleep_for() call in the loop below so that each call to write_bytes_create()
+        // will call the purge code. If the default (2000 ms) is used, purge will be called once, for the
+        // first write...() and never again. Nothing will be purged. jhrg 10/4/25
+        c.set_purge_mtx_ttl(20);
+
         // Write several files > cap
         std::vector<std::string> keys;
         for (int i=0; i<6; ++i) {
@@ -353,11 +381,8 @@ class RedisFileCacheLRUTest : public CppUnit::TestFixture {
             std::string data(4096, char('A' + i));
             c.write_bytes_create(key, data);
             keys.push_back(key);
-            std::this_thread::sleep_for(std::chrono::milliseconds(5)); // separate LRU timestamps
+            std::this_thread::sleep_for(std::chrono::milliseconds(50)); // separate LRU timestamps
         }
-
-        // Let eviction settle
-        std::this_thread::sleep_for(std::chrono::milliseconds(80));
 
         // Check total <= cap
         const std::string total_k = ns + ":idx:total";
@@ -367,16 +392,14 @@ class RedisFileCacheLRUTest : public CppUnit::TestFixture {
             else if (r->type == REDIS_REPLY_INTEGER) total = r->integer;
             freeReplyObject(r);
         }
-        DBG(std::cerr << "total: " << total << ", cap: " << cap << '\n');
-        CPPUNIT_ASSERT(total <= cap);
+        CPPUNIT_ASSERT_MESSAGE("Total (" + std::to_string(total) +") should be less than cap (" + std::to_string(cap) + ").", total <= cap);
 
         // At least one of the earliest files should be gone on disk
         int gone = 0;
         for (const auto& k : keys) {
             if (!file_exists(cache_dir + "/" + k)) ++gone;
         }
-        DBG(std::cerr << "gone: " << gone << '\n');
-        CPPUNIT_ASSERT(gone >= 1);
+        CPPUNIT_ASSERT_MESSAGE("Gone (" + std::to_string(gone) + ") should be >= 1", gone >= 1);
 
         // Eviction log should have entries (best-effort)
         const std::string evlog = ns + ":evict:log";

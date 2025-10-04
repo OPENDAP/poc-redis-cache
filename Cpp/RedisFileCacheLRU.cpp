@@ -123,7 +123,7 @@ long long RedisFileCache::file_size_bytes(const std::string& p) {
 }
 
 RedisFileCache::RedisFileCache(std::string cache_dir,
-                               std::string redis_host,
+                               const std::string &redis_host,
                                int redis_port,
                                int redis_db,
                                long long lock_ttl_ms,
@@ -132,8 +132,8 @@ RedisFileCache::RedisFileCache(std::string cache_dir,
 : cache_dir_(std::move(cache_dir)),
   ns_(std::move(ns)),
   ttl_ms_(lock_ttl_ms),
-  rc_(nullptr, rc_deleter),
-  max_bytes_(max_bytes)
+  max_bytes_(max_bytes),
+  rc_(nullptr, rc_deleter)
 {
     ensure_dir(cache_dir_);
 
@@ -147,7 +147,10 @@ RedisFileCache::RedisFileCache(std::string cache_dir,
     rc_.reset(c);
 
     if (redis_db != 0) {
-        cmd_ll("SELECT %d", redis_db);
+        auto ok = cmd_s("SELECT %d", redis_db);
+        if (ok != "OK") {
+            throw std::runtime_error("Redis database connection error (db: " + std::to_string(redis_db) + ")");
+        }
     }
 
     // load scripts
@@ -287,35 +290,36 @@ void RedisFileCache::write_bytes_create(const std::string& key, const std::strin
     auto p = path_for(key);
     if (file_exists_(p)) throw std::system_error(EEXIST, std::generic_category(), "exists");
 
-    const auto token = acquire_write(key);
+    const auto token = acquire_write(key); // throws cache busy
 
     // tmp file
     char tmpl[4096];
     std::snprintf(tmpl, sizeof(tmpl), "%s/.%s.XXXXXX", cache_dir_.c_str(), key.c_str());
-    int tfd = ::mkstemp(tmpl);
+    const int tfd = ::mkstemp(tmpl);
     if (tfd < 0) {
         int e = errno; release_write(key, token);
         throw std::system_error(e, std::generic_category(), "mkstemp");
     }
 
     // write data
-    ssize_t left = (ssize_t)data.size();
+    auto left = (ssize_t)data.size();
     const char* ptr = data.data();
     ssize_t wrote = 0;
     while (left > 0) {
-        ssize_t n = ::write(tfd, ptr + wrote, left);
+        const ssize_t n = ::write(tfd, ptr + wrote, left);
         if (n < 0) {
-            int e = errno; ::close(tfd); ::unlink(tmpl); release_write(key, token);
+            const int e = errno; ::close(tfd); ::unlink(tmpl); release_write(key, token);
             throw std::system_error(e, std::generic_category(), "write");
         }
         wrote += n; left -= n;
     }
-    try { fsync_fd(tfd); } catch (...) {
+    try { fsync_fd(tfd); } // throws system_error on error.
+    catch (...) {
         ::close(tfd); ::unlink(tmpl); release_write(key, token); throw;
     }
     ::close(tfd);
 
-    // final create-only check (belt & suspenders)
+    // final create-only check
     if (file_exists_(p)) {
         ::unlink(tmpl); release_write(key, token);
         throw std::system_error(EEXIST, std::generic_category(), "concurrent create");
@@ -329,8 +333,8 @@ void RedisFileCache::write_bytes_create(const std::string& key, const std::strin
     release_write(key, token);
 
     // record size + touch LRU + enforce capacity
-    auto sz = (long long)data.size();
-    long long ts = now_ms();
+    const auto sz = (long long)data.size();
+    const long long ts = now_ms();
     index_add_on_publish(key, sz, ts);
 
     if (max_bytes_ > 0) {
@@ -345,15 +349,14 @@ void RedisFileCache::write_bytes_create(const std::string& key, const std::strin
  * holds time the number of writers, this purging scheme can result in a
  * cache that 2 or more times the maximum configured size.
  *
- * @todo Add a timer that will exit the while loop when the k_purge_mtx_
- *   times out. Also, make the time period a class parameter. jhrg 10/2/25
+ * @todo Should this purge to some level less than full capacity? jhrg 10/4/25
  */
 void RedisFileCache::ensure_capacity() {
     if (max_bytes_ <= 0) return;
 
-    // best-effort single purger: SET NX PX 2s
+    // best-effort single purger: SET NX PX 2s (default, configurable)
     // if this fails, another process is purging; return
-    auto ok = cmd_s("SET %s 1 NX PX %d", k_purge_mtx_.c_str(), 2000);
+    auto ok = cmd_s("SET %s 1 NX PX %d", k_purge_mtx_.c_str(), purge_mtx_ttl_ms_);
     if (ok != "OK") return;
 
     try {
@@ -361,11 +364,17 @@ void RedisFileCache::ensure_capacity() {
             std::string victim;
             long long freed = 0;
             if (!try_evict_one(victim, freed)) break;
+            // ensure the purge mutex remains if this loop take longer than purge_mtx_ttl_ms_
+            // to reduce the chance that the mutex auto-expires before the purge is complete.
+            // NB: 'XX' means set only if the key exists. jhrg 10/4/25
+            ok = cmd_s("SET %s 1 XX PX %d", k_purge_mtx_.c_str(), purge_mtx_ttl_ms_);
+            if (ok != "OK") return; // exit if the mutex TTL cannot be updated
         }
     } catch (...) {
         // swallow; purger is best-effort
     }
-    // mutex auto-expires
+    // mutex auto-expires, but if this is called more frequently than purge_mtx_ttl_ms_
+    // those calls won't try to purge. jhrg 10/4/25
 }
 
 /**
