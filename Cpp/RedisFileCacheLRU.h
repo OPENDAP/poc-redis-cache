@@ -75,13 +75,10 @@ private:
     // new files are added. Make this small for certain tests, etc. (see TestRedisFileCacheLRU.cpp)
     // jhrg 10/4//25
     long long purge_mtx_ttl_ms_ = 2000; /// Minimum purge frequency
+    double purge_factor_ = 0.2; /// Purge below max_bytes_ by this factor; between 0.0 and 1.0
 
     std::unique_ptr<redisContext, void(*)(redisContext*)> rc_;  /// The Redis connection
     std::unique_ptr<ScriptManager> scripts_{nullptr};   /// Manages the LUA scripts
-
-    // setters/getters
-    long long get_purge_mtx_ttl() const { return purge_mtx_ttl_ms_; }
-    void set_purge_mtx_ttl(const long long ttl) { purge_mtx_ttl_ms_ = ttl; }
 
     // index keys
 
@@ -123,6 +120,14 @@ private:
     static void fsync_fd(int fd);
 
     friend class RedisFileCacheLRUTest;
+
+public:
+    // setters/getters
+    long long get_purge_mtx_ttl() const { return purge_mtx_ttl_ms_; }
+    void set_purge_mtx_ttl(const long long ttl) { purge_mtx_ttl_ms_ = ttl; }
+
+    double get_purge_factor() const { return purge_factor_; }
+    void set_purge_factor(const double pf) { if (pf < 0.0 || pf > 1.0) return; purge_factor_ = pf; }
 };
 
 #endif //POC_REDIS_CACHE_REDIS_POC_CACHE_HIREDIS_H

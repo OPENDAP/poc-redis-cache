@@ -348,11 +348,11 @@ void RedisFileCache::write_bytes_create(const std::string& key, const std::strin
  * the cache. If the cache size is too close to the size of the objects it
  * holds time the number of writers, this purging scheme can result in a
  * cache that 2 or more times the maximum configured size.
- *
- * @todo Should this purge to some level less than full capacity? jhrg 10/4/25
  */
 void RedisFileCache::ensure_capacity() {
     if (max_bytes_ <= 0) return;
+
+    if (get_total_bytes() < max_bytes_) return;
 
     // best-effort single purger: SET NX PX 2s (default, configurable)
     // if this fails, another process is purging; return
@@ -360,7 +360,8 @@ void RedisFileCache::ensure_capacity() {
     if (ok != "OK") return;
 
     try {
-        while (get_total_bytes() > max_bytes_) {
+        const auto purge_level = max_bytes_ - (long long)(max_bytes_ * purge_factor_);
+        while (get_total_bytes() > purge_level) {
             std::string victim;
             long long freed = 0;
             if (!try_evict_one(victim, freed)) break;

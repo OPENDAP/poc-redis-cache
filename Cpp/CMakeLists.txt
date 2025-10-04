@@ -34,24 +34,23 @@ endif()
 
 include_directories(${HIREDIS_INCLUDE_DIR})
 
-# Library (your hiredis-based cache)
-add_library(redis_cache
-		RedisFileCache.cpp
-		ScriptManager.h
-)
-target_link_libraries(redis_cache
-		${HIREDIS_LIB}
-)
-
-# Test / stress executable
-add_executable(RedisFileCache_Simulator
-		RedisFileCache_Simulator.cpp
-)
-
-target_link_libraries(RedisFileCache_Simulator
-		redis_cache
-		${HIREDIS_LIB}
-)
+#add_library(redis_cache
+#		RedisFileCache.cpp
+#		ScriptManager.h
+#)
+#target_link_libraries(redis_cache
+#		${HIREDIS_LIB}
+#)
+#
+## Test / stress executable
+#add_executable(RedisFileCache_Simulator
+#		RedisFileCache_Simulator.cpp
+#)
+#
+#target_link_libraries(RedisFileCache_Simulator
+#		redis_cache
+#		${HIREDIS_LIB}
+#)
 
 # The same cache with LRU eviction
 add_library(redis_cache_lru
@@ -77,6 +76,6 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 	target_compile_options(redis_cache_lru PRIVATE ${DEV_FLAGS})
 	target_compile_options(RedisFileCacheLRU_Simulator PRIVATE ${DEV_FLAGS})
 
-	target_compile_options(redis_cache PRIVATE ${DEV_FLAGS})
-	target_compile_options(RedisFileCache_Simulator PRIVATE ${DEV_FLAGS})
+#	target_compile_options(redis_cache PRIVATE ${DEV_FLAGS})
+#	target_compile_options(RedisFileCache_Simulator PRIVATE ${DEV_FLAGS})
 endif()
