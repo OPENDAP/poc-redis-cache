@@ -56,7 +56,7 @@ public:
     bool read_bytes_blocking(const std::string& key,
                              std::string& out,
                              std::chrono::milliseconds timeout,
-                             std::chrono::milliseconds backoff = std::chrono::milliseconds(10));
+                             std::chrono::milliseconds backoff = std::chrono::milliseconds(10)) const;
 
     bool write_bytes_create_blocking(const std::string& key,
                                      const std::string& data,

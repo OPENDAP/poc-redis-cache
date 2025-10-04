@@ -466,9 +466,9 @@ bool RedisFileCache::try_evict_one(std::string& victim, long long& freed) {
 bool RedisFileCache::read_bytes_blocking(const std::string& key,
                                          std::string& out,
                                          std::chrono::milliseconds timeout,
-                                         std::chrono::milliseconds backoff)
+                                         std::chrono::milliseconds backoff) const
 {
-    auto deadline = std::chrono::steady_clock::now() + timeout;
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
     while (true) {
         try {
             out = read_bytes(key);           // non-blocking attempt
@@ -508,7 +508,7 @@ bool RedisFileCache::write_bytes_create_blocking(const std::string& key,
                                                  std::chrono::milliseconds timeout,
                                                  std::chrono::milliseconds backoff)
 {
-    auto deadline = std::chrono::steady_clock::now() + timeout;
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
     while (true) {
         try {
             write_bytes_create(key, data);   // non-blocking path
