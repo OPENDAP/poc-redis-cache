@@ -8,8 +8,7 @@
 
 #include "RedisFileCacheLRU.h"
 
-#include <cppunit/extensions/HelperMacros.h>
-#include <cppunit/TestFixture.h>
+#include "run_tests_cppunit.h"
 
 #include <hiredis/hiredis.h>
 
@@ -21,12 +20,12 @@
 #include <random>
 #include <chrono>
 #include <thread>
+#include <cerrno>
 
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <dirent.h>
 #include <unistd.h>
-#include <errno.h>
 
 namespace {
 
@@ -338,3 +337,5 @@ class RedisFileCacheLRUTest : public CppUnit::TestFixture {
 };
 
 CPPUNIT_TEST_SUITE_REGISTRATION(RedisFileCacheLRUTest);
+
+int main(int argc, char *argv[]) { return run_tests<RedisFileCacheLRUTest>(argc, argv) ? 0 : 1; }
