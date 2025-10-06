@@ -1,0 +1,175 @@
+#
+# The bes build
+#
+# Initial Travis-CI control file. 6.5.15 jhrg
+# Hacked quite a bit; added support for parallel autotest tests
+# and removed unused parts. jhrg 8.23.17
+#
+# Now uses hyrax-dependencies and libdap binaries stored in an AWS S3 bucket
+# that were built using other builds. jhrg 2.24.18
+#
+# Try using Ubuntu Focal
+
+# virt: lxd             # use an lxd container
+# arch: amd64           # optional, this is the default, routes to a full VM
+# os: linux             # optional, this is the default
+dist: focal             # xenial is the default for travis, focal (20), jammy (22), noble (24)
+
+# Added vm size upgrade. This costs extra $s
+# vm:
+#  size: x-large
+
+language: cpp
+compiler: gcc
+
+branches:
+  only:
+  - main
+
+# This cache is used to speed up sonar scan runs. See https://docs.travis-ci.com/user/caching.
+# Each branch gets its own cache. The three different sonar scan runs each use their own cache
+# directory set in the three sonar-bes-*.properties files. jhrg 1/13/22
+cache:
+  directories:
+    - ./.cache/sonar/
+
+addons:
+  sonarcloud: true
+  apt:
+    packages:
+      - libhiredis-dev
+#      - uuid-dev
+#      - libxml2-dev
+#      - libcurl4-openssl-dev
+#      - libcppunit-dev
+#      - libicu-dev
+#      - gcovr
+#      - grep
+      - libfl-dev   # needed for focal, but not xenial. jhrg 1/18/24
+
+git:
+  depth: false
+
+env:
+  global:
+    # NB: This value of $prefix must be shared between the hyrax-deps, libdap and bes builds.
+    - prefix=$HOME/install
+    - PATH=$prefix/bin:$prefix/deps/bin:$PATH
+#    - TESTSUITEFLAGS=-j7
+#    # Change this when libdap version numbers change
+#    - LIBDAP_RPM_VERSION=3.21.1-0
+#    # SONAR_LOGIN, made using "travis encrypt --org -r OPENDAP/bes SONAR_LOGIN=335df..."
+#    - secure: "TmoFcgeIyAEjFyrlqB6rhdUhDqPJfxVZmT5fewgVHj0xm767VZ6DU21mM6ZHgNGyk99TzX0Gx/dwSqbsUj18hSSAvEa7fJQSKJ5IBJvTeMKhXn1DPPG9VpuZ4ti5afRDiNr6EJKbVxwBTkz+3798S8LajPuXGupYupir8IJQCt8="
+#    # SONAR_MODULES_LOGIN, using "travis encrypt --org -r OPENDAP/bes SONAR_MODULES_LOGIN=42ba..."
+#    - secure: "V3fMZgzMRRB0xFQMTvXf2fFPHIdwvg2y6bNFKqSGI5HP2sZEtc7XqSC4hjboR9RjnyZY/H1L/EuYQCS45gmJMsmtzo4g1Cn0oTfuPRJzDSi00jRlB1wUl5p1pU0Fdv2ffrGF4m6/SRfYFT0KkR/Tp8hdIoYx5/8R4MajysABMT4="
+#    # SONAR_SUBMODULES_LOGIN, using "travis encrypt --org -r OPENDAP/bes SONAR_SUBMODULES_LOGIN=Q4aWrvS..."
+#    - secure: "Q4aWrvSlKUY7413FNI6tHlWJdhVtjJxrtSBApJRe5fGTn/HEmod5n3O4o0elFhuYh0O57aYsYclD7t0lriKMPvPdY/s8CFAaIPSANhNRkD44MWYWCPyivl83BBUlhWgkqgWFcCEaTqCpF/8A0HlOF1TsE1KKyQSns7snqgWTfSA="    # AWS_ACCESS_KEY_ID
+#    # AWS_ACCESS_KEY_ID
+#    # user == travis-bes
+#    - secure: "ZfL1IPX5zab1HWkJTlNPHroyUOp2lhAlcCH6UXDEL/yXpKoRCNkSo/CILM20DsjBckGys/7chom6uIoOilLu9Tp/6nPwkYlOe5DjgDt/qqKutclk9QBfrwU7WHRUOiEOESZl3Knd6B+GzuBZe8nrJzJhZWT54VFiOlEAGeIiFwo="
+#    # AWS_SECRET_ACCESS_KEY
+#    # user == travis-bes
+#    - secure: "UpZB8cf3sOq11Yet8Cktnw4LiWZf24NJ0ugh8drVhShctLhZDiXKb/kMY3VA+pg7Q08ktmKsVYm1WM/+IpQJfOv/gYcGPwSlGuUUW87awtn7WdNPOZBIpG6dZ8dwcWh5XXKHVDyuRpxqc4vmjrIuB5ZUqdT5yVItnp3UhtJjaig="
+#    # GIT_UID travis-ci-opendap
+#    - secure: "eUL/RY4kJD9sb3q98Xbfbcdhs6eyFWkfWNb0tvRzksBi/+tYiuojsek0qoBFZnRnO0wwyDAaDrZgu2yoLQTBxGSTqCsYaoDiFtw2m8aW3r+FdjpfmyVR52U9vMoZtpiPGYYM9utlyQ6YRNhzq+XzDJ4juygoIlzbp7qXTALqIL8="
+#    # GIT_PSWD for travis-ci-opendap
+#    - secure: "dlULHE4qbXKEgqJZ0hiL7PcUqEcFaHzHE5GQbZ1v6wCyFujEvq34ayChOHuxZvrfNo64lCKjpHYs1Znq0m69dpkdSP3m0fv2rgLaqqTxD+ewgsYzmlKRA8jWuDx0WvV5IltS9KNdBj2Aj6wSsw5cqPkuRbYQlQCYj7GdqhAPlP8="
+#    # DOCKER_HUB_UID for travis
+#    # - secure: "b0/W8+DA35StZB5BKRDn0yLxGE6n/Hc4vXRUBX2bylsSyw1IVplrl4PgKbafE0CT5PfFssOUH1cMlYcSOXgV3EWOeNWquIhwq1cASUJClTf55Y4kr1XPr6bNtdbPJ7UAKw1EG2TyZx0vy7A6TrKwgb9Al24ABm0ev4aFWUk+Sks="
+#    # DOCKER_HUB_PSWD for travis
+#    # - secure: "Z+M0JHT3szHclksjh8ettN9OoDjX0+lgOaORnSH8H/xvaQp1YCYzmEajnknGGCop6arM+PaiArZEZl7e8X1kBqReitSISLCwbS6XU/juRi1OBqfkk1YzSOgU03jLXe3MG2CmfQRLdExjdHCsphHEXthU2Z0tY++Tq31IfFPy1JQ="
+#    - CMAC_ID="${AWS_ACCESS_KEY_ID}"
+#    - CMAC_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
+#    - CMAC_URL="https://s3.amazonaws.com/cloudydap/"
+#    - CMAC_REGION="us-east-1"
+#    - CMAC_BUCKET="cloudydap"
+
+before_install:
+  - gem install bundler
+  - pip install --user awscli
+  # fix for Java 17 install for Sonar from Travis CI support. jhrg 1/23/24
+  - curl -s "https://get.sdkman.io" | bash
+  - source "$HOME/.sdkman/bin/sdkman-init.sh"
+  - sdk install java 17.0.2-open
+  - sdk use java 17.0.2-open
+  - java -version
+
+# hyrax-dependencies-build.tar.gz includes/makes the build directory
+install:
+#  - aws s3 cp s3://opendap.travis.build/hyrax-dependencies-build.tar.gz $TRAVIS_BUILD_DIR
+#  - tar -C $HOME -xzvf $TRAVIS_BUILD_DIR/hyrax-dependencies-build.tar.gz
+#  - aws s3 cp s3://opendap.travis.build/libdap-build.tar.gz $TRAVIS_BUILD_DIR
+#  - tar -C $HOME -xzvf $TRAVIS_BUILD_DIR/libdap-build.tar.gz
+
+before_script:
+#  - source travis/travis_bes_build_offset.sh
+#  - export BES_BUILD_NUMBER=$(expr $TRAVIS_BUILD_NUMBER - $BES_TRAVIS_BUILD_OFFSET)
+#  - echo "BES_BUILD_NUMBER is ${BES_BUILD_NUMBER} = ${TRAVIS_BUILD_NUMBER} - ${BES_TRAVIS_BUILD_OFFSET}"
+#  - export LIBDAP_RPM_VERSION=$(grep "libdap4-" libdap4-snapshot | awk '{print $1;}' - | sed "s/libdap4-//g")
+  - echo "Travis default env:"
+  - printenv
+
+stages:
+  - name: build
+  - name: scan
+    if:  branch = main
+
+jobs:
+  include:
+    - stage: build
+      name: "build"
+      script:
+        - mkdir build
+        - cd build
+        - cmake .. -D
+        - make -j16
+
+    - stage: never # build
+      name: "Enterprise Linux 8 (via Rocky8)"
+      script:
+        - docker run --env prefix=/root/install --volume $prefix/rpmbuild:/root/rpmbuild 
+            --volume $TRAVIS_BUILD_DIR:/root/travis
+            --env OS=rocky8
+            --env DIST=el8
+            --env LIBDAP_RPM_VERSION=$LIBDAP_RPM_VERSION
+            --env BES_BUILD_NUMBER=$BES_BUILD_NUMBER
+            --env AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+            --env AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+            opendap/rocky8_hyrax_builder:latest /root/travis/travis/build-rpm.sh
+
+    - stage: never # scan
+      name: "scan bes"
+      script:
+        - mkdir build
+        - cd build
+        - cmake ..
+        - build-wrapper-linux-x86-64 --out-dir bw-output make -j16
+        - sonar-scanner -Dproject.settings=sonar-bes-framework.properties -Dsonar.login=$SONAR_LOGIN
+        - curl -s https://sonarcloud.io/api/project_badges/quality_gate?project=opendap-bes | grep "QUALITY GATE PASS"
+
+#after_script:
+#  - ./travis/upload-test-results.sh
+#
+#before_deploy:
+#  - export DEPLOY="S3"
+#  # Make sure that we have the target dir...
+#  - mkdir -p $TRAVIS_BUILD_DIR/package;
+#  # Source distribution prep (copies both the 'version' and 'snapshot')
+#  - if test "$BES_BUILD" = "srcdist"; then cp bes-*.tar.gz $TRAVIS_BUILD_DIR/package; fi
+#  # Rocky8  distribution prep
+#  - if test "$BES_BUILD" = "rocky8"; then ./travis/rpm-to-package-dir.sh "el8"; fi
+#  # Check for the stuff...
+#  - ls -l $TRAVIS_BUILD_DIR/package
+#
+## The deploy section copies the snapshot build product our S3 bucket and to www.opendap.org
+#deploy:
+#  # Push all build results to our S3 bucket
+#  - provider: s3
+#    access_key_id: $AWS_ACCESS_KEY_ID
+#    secret_access_key: $AWS_SECRET_ACCESS_KEY
+#    bucket: opendap.travis.build
+#    skip_cleanup: true
+#    local_dir: $TRAVIS_BUILD_DIR/package
+#    on:
+#      all_branches: true
+#      condition: $BES_BUILD =~ ^rocky8|srcdist$
