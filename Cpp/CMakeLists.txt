@@ -1,10 +1,10 @@
-cmake_minimum_required(VERSION 3.10)
+#cmake_minimum_required(VERSION 3.18)
 
 # C++14 (works fine for all code below)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_subdirectory(unit-tests)
+# add_subdirectory(unit-tests)
 
 option(USE_ASAN "Enable Address Sanitizer" OFF)
 option(BUILD_DEVELOPER "Build in developer mode" OFF)
@@ -82,3 +82,16 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 #	target_compile_options(redis_cache PRIVATE ${DEV_FLAGS})
 #	target_compile_options(RedisFileCache_Simulator PRIVATE ${DEV_FLAGS})
 endif()
+
+# enable_testing()
+add_subdirectory(unit-tests)
+
+## a target that runs only the unit tests:
+#add_custom_target(unit-test
+#		COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -L unit
+#		DEPENDS unit-tests)            # or whatever your unit‐test target is
+#
+## a “check” target to do unit → integration in order:
+#add_custom_target(check
+#		DEPENDS unit-test integration-test
+#)

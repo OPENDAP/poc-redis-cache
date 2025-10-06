@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+# cmake_minimum_required(VERSION 3.10)
 
 # Paths
 set(PARENT_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/..")
