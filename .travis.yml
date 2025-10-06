@@ -130,8 +130,6 @@ jobs:
         - cd build
         - cmake .. -DCMAKE_INSTALL_PREFIX=$prefix -DCMAKE_VERBOSE_MAKEFILE=on
         - make -j16
-        # Start Redis
-        -
         - ctest -j
 
     - stage: never # build
