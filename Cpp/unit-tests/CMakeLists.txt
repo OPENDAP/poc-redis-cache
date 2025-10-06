@@ -12,16 +12,21 @@ endif()
 
 # find_package(CppUnit REQUIRED)   # Provides CppUnit::CppUnit
 
-if(BUILD_DEVELOPER)
-    set(DEV_FLAGS -g3 -O0 ${COMMON_WARNINGS})
-else()
-    set(DEV_FLAGS -O2 -DNDEBUG ${COMMON_WARNINGS})
-endif()
+#if(BUILD_DEVELOPER)
+#    set(DEV_FLAGS -g3 -O0 ${COMMON_WARNINGS})
+#else()
+#    set(DEV_FLAGS -O2 -DNDEBUG ${COMMON_WARNINGS})
+#endif()
+#
+#if(USE_ASAN)
+#    list(APPEND DEV_FLAGS -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer)
+#    set(ASAN_LINK_FLAGS -fsanitize=address -fsanitize=undefined)
+#endif()
 
-if(USE_ASAN)
-    list(APPEND DEV_FLAGS -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer)
-    set(ASAN_LINK_FLAGS -fsanitize=address -fsanitize=undefined)
-endif()
+message(STATUS "CPPUNIT_INCLUDE_DIR: ${CPPUNIT_INCLUDE_DIR}")
+message(STATUS "CPPUNIT_LIB: ${CPPUNIT_LIB}")
+message(STATUS "HIREDIS_INCLUDE_DIR: ${HIREDIS_INCLUDE_DIR}")
+message(STATUS "HIREDIS_LIB: ${HIREDIS_LIB}")
 
 # -------- Executable: test_RedisFileCacheLRU --------
 # This test needs both the cache and script manager impls.
