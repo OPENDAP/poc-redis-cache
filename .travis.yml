@@ -121,7 +121,7 @@ jobs:
       script:
         - mkdir build
         - cd build
-        - cmake .. -D
+        - cmake .. -DCMAKE_INSTALL_PREFIX=$prefix -DCMAKE_VERBOSE_MAKEFILE=on
         - make -j16
 
     - stage: never # build
