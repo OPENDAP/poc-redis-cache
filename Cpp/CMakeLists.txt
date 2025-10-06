@@ -1,4 +1,3 @@
-#cmake_minimum_required(VERSION 3.18)
 
 # C++14 (works fine for all code below)
 set(CMAKE_CXX_STANDARD 14)
@@ -32,30 +31,12 @@ if (NOT HIREDIS_INCLUDE_DIR OR NOT HIREDIS_LIB)
 	message(FATAL_ERROR "Could not find hiredis. Set HIREDIS_INCLUDE_DIR/HIREDIS_LIB or install hiredis.")
 endif()
 
-message(STATUS "HIREDIS_INCLUDE_DIR: ${HIREDIS_INCLUDE_DIR}")
-message(STATUS "HIREDIS_LIB: ${HIREDIS_LIB}")
+message(DEBUG "Cpp HIREDIS_INCLUDE_DIR: ${HIREDIS_INCLUDE_DIR}")
+message(DEBUG "Cpp HIREDIS_LIB: ${HIREDIS_LIB}")
 
 include_directories(${HIREDIS_INCLUDE_DIR})
 
-#add_library(redis_cache
-#		RedisFileCache.cpp
-#		ScriptManager.h
-#)
-#target_link_libraries(redis_cache
-#		${HIREDIS_LIB}
-#)
-#
-## Test / stress executable
-#add_executable(RedisFileCache_Simulator
-#		RedisFileCache_Simulator.cpp
-#)
-#
-#target_link_libraries(RedisFileCache_Simulator
-#		redis_cache
-#		${HIREDIS_LIB}
-#)
-
-# The same cache with LRU eviction
+# The cache with LRU eviction
 add_library(redis_cache_lru
 		RedisFileCacheLRU.cpp
 		ScriptManager.h
@@ -78,19 +59,8 @@ target_link_libraries(RedisFileCacheLRU_Simulator
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 	target_compile_options(redis_cache_lru PRIVATE ${DEV_FLAGS})
 	target_compile_options(RedisFileCacheLRU_Simulator PRIVATE ${DEV_FLAGS})
-
-#	target_compile_options(redis_cache PRIVATE ${DEV_FLAGS})
-#	target_compile_options(RedisFileCache_Simulator PRIVATE ${DEV_FLAGS})
 endif()
 
-#
+# It is necessary to put this here, after the HIREDIS_INCLUDE_DIR, etc., variables are
+# defined. jhrg 10/6/25
 add_subdirectory(unit-tests)
-
-## a target that runs only the unit tests:
-#add_custom_target(unit-test
-#		COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -L unit
-#		DEPENDS unit-tests)            # or whatever your unit‐test target is
-#
-## a “check” target to do unit → integration in order:
-#add_custom_target(check
-#		DEPENDS unit-test)

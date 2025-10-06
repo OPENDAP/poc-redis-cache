@@ -1,4 +1,3 @@
-# cmake_minimum_required(VERSION 3.10)
 
 # Paths
 set(PARENT_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/..")
@@ -10,23 +9,10 @@ if (NOT CPPUNIT_INCLUDE_DIR OR NOT CPPUNIT_LIB)
     message(FATAL_ERROR "CppUnit not found. Set CPPUNIT_INCLUDE_DIR and CPPUNIT_LIB, or install hiredis.")
 endif()
 
-# find_package(CppUnit REQUIRED)   # Provides CppUnit::CppUnit
-
-#if(BUILD_DEVELOPER)
-#    set(DEV_FLAGS -g3 -O0 ${COMMON_WARNINGS})
-#else()
-#    set(DEV_FLAGS -O2 -DNDEBUG ${COMMON_WARNINGS})
-#endif()
-#
-#if(USE_ASAN)
-#    list(APPEND DEV_FLAGS -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer)
-#    set(ASAN_LINK_FLAGS -fsanitize=address -fsanitize=undefined)
-#endif()
-
-message(STATUS "CPPUNIT_INCLUDE_DIR: ${CPPUNIT_INCLUDE_DIR}")
-message(STATUS "CPPUNIT_LIB: ${CPPUNIT_LIB}")
-message(STATUS "HIREDIS_INCLUDE_DIR: ${HIREDIS_INCLUDE_DIR}")
-message(STATUS "HIREDIS_LIB: ${HIREDIS_LIB}")
+message(DEBUG "Cpp/unit-test CPPUNIT_INCLUDE_DIR: ${CPPUNIT_INCLUDE_DIR}")
+message(DEBUG "Cpp/unit-test CPPUNIT_LIB: ${CPPUNIT_LIB}")
+message(DEBUG "Cpp/unit-test HIREDIS_INCLUDE_DIR: ${HIREDIS_INCLUDE_DIR}")
+message(DEBUG "Cpp/unit-test HIREDIS_LIB: ${HIREDIS_LIB}")
 
 # -------- Executable: test_RedisFileCacheLRU --------
 # This test needs both the cache and script manager impls.
@@ -52,8 +38,6 @@ add_test(NAME TestRedisFileCacheLRU COMMAND TestRedisFileCacheLRU)
 # This enables using `ctest -L unit` to run just these tests.
 set_tests_properties(TestRedisFileCacheLRU PROPERTIES LABELS unit)
 
-#apply_warnings(TestRedisFileCacheLRU)
-
 # -------- Executable: test_ScriptManager --------
 # This test only needs ScriptManager.
 add_executable(TestScriptManager
@@ -77,11 +61,3 @@ target_link_libraries(TestScriptManager
 add_test(NAME TestScriptManager COMMAND TestScriptManager)
 # This enables using `ctest -L unit` to run just these tests.
 set_tests_properties(TestScriptManager PROPERTIES LABELS unit)
-
-# apply_warnings(TestScriptManager)
-
-# -------- Convenience output --------
-#message(STATUS "Built tests:")
-#message(STATUS "  - TestRedisFileCacheLRU")
-#message(STATUS "  - TestScriptManager")
-#message(STATUS "Include your CppUnit main header from each test source so 'main()' is present.")
