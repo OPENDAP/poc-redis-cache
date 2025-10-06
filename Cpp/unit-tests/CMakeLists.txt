@@ -48,6 +48,10 @@ target_link_libraries(TestRedisFileCacheLRU
         "${HIREDIS_LIB}"
 )
 
+add_test(NAME TestRedisFileCacheLRU COMMAND TestRedisFileCacheLRU)
+# This enables using `ctest -L unit` to run just these tests.
+set_tests_properties(TestRedisFileCacheLRU PROPERTIES LABELS unit)
+
 #apply_warnings(TestRedisFileCacheLRU)
 
 # -------- Executable: test_ScriptManager --------
@@ -70,10 +74,14 @@ target_link_libraries(TestScriptManager
         "${HIREDIS_LIB}"
 )
 
+add_test(NAME TestScriptManager COMMAND TestScriptManager)
+# This enables using `ctest -L unit` to run just these tests.
+set_tests_properties(TestScriptManager PROPERTIES LABELS unit)
+
 # apply_warnings(TestScriptManager)
 
 # -------- Convenience output --------
-message(STATUS "Built tests:")
-message(STATUS "  - TestRedisFileCacheLRU")
-message(STATUS "  - TestScriptManager")
-message(STATUS "Include your CppUnit main header from each test source so 'main()' is present.")
+#message(STATUS "Built tests:")
+#message(STATUS "  - TestRedisFileCacheLRU")
+#message(STATUS "  - TestScriptManager")
+#message(STATUS "Include your CppUnit main header from each test source so 'main()' is present.")

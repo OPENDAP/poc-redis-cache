@@ -50,6 +50,10 @@ addons:
 git:
   depth: false
 
+services:
+  # Start the Redis server.
+  - redis-server
+
 env:
   global:
     # NB: This value of $prefix must be shared between the hyrax-deps, libdap and bes builds.
@@ -126,6 +130,9 @@ jobs:
         - cd build
         - cmake .. -DCMAKE_INSTALL_PREFIX=$prefix -DCMAKE_VERBOSE_MAKEFILE=on
         - make -j16
+        # Start Redis
+        -
+        - ctest -j
 
     - stage: never # build
       name: "Enterprise Linux 8 (via Rocky8)"

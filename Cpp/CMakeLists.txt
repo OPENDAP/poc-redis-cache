@@ -83,7 +83,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 #	target_compile_options(RedisFileCache_Simulator PRIVATE ${DEV_FLAGS})
 endif()
 
-# enable_testing()
+#
 add_subdirectory(unit-tests)
 
 ## a target that runs only the unit tests:
@@ -93,5 +93,4 @@ add_subdirectory(unit-tests)
 #
 ## a “check” target to do unit → integration in order:
 #add_custom_target(check
-#		DEPENDS unit-test integration-test
-#)
+#		DEPENDS unit-test)
