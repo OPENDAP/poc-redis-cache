@@ -41,7 +41,7 @@ addons:
 #      - uuid-dev
 #      - libxml2-dev
 #      - libcurl4-openssl-dev
-#      - libcppunit-dev
+      - libcppunit-dev
 #      - libicu-dev
 #      - gcovr
 #      - grep
@@ -113,6 +113,8 @@ stages:
   - name: build
   - name: scan
     if:  branch = main
+  - name: never
+    if: branch = never
 
 jobs:
   include:
