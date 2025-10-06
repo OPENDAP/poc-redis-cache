@@ -26,11 +26,14 @@ endif()
 
 # If hiredis isn't in a standard location, set:
 #   cmake -DHiredis_ROOT=/path/to/hiredis/install ..
-find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h)
-find_library(HIREDIS_LIB hiredis)
+find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h REQUIRED)
+find_library(HIREDIS_LIB hiredis REQUIRED)
 if (NOT HIREDIS_INCLUDE_DIR OR NOT HIREDIS_LIB)
 	message(FATAL_ERROR "Could not find hiredis. Set HIREDIS_INCLUDE_DIR/HIREDIS_LIB or install hiredis.")
 endif()
+
+message(STATUS "HIREDIS_INCLUDE_DIR: ${HIREDIS_INCLUDE_DIR}")
+message(STATUS "HIREDIS_LIB: ${HIREDIS_LIB}")
 
 include_directories(${HIREDIS_INCLUDE_DIR})
 

@@ -88,10 +88,11 @@ before_install:
   - gem install bundler
   - pip install --user awscli
   # fix for Java 17 install for Sonar from Travis CI support. jhrg 1/23/24
-  - curl -s "https://get.sdkman.io" | bash
-  - source "$HOME/.sdkman/bin/sdkman-init.sh"
-  - sdk install java 17.0.2-open
-  - sdk use java 17.0.2-open
+  # switch to Ubuntu Jammy to get Java 17 by default. jhrg 10/6/25
+#  - curl -s "https://get.sdkman.io" | bash
+#  - source "$HOME/.sdkman/bin/sdkman-init.sh"
+#  - sdk install java 17.0.2-open
+#  - sdk use java 17.0.2-open
   - java -version
 
 # hyrax-dependencies-build.tar.gz includes/makes the build directory
