@@ -1,0 +1,134 @@
+#
+# The bes build
+#
+# Initial Travis-CI control file. 6.5.15 jhrg
+# Hacked quite a bit; added support for parallel autotest tests
+# and removed unused parts. jhrg 8.23.17
+#
+# Now uses hyrax-dependencies and libdap binaries stored in an AWS S3 bucket
+# that were built using other builds. jhrg 2.24.18
+#
+# Try using Ubuntu Focal
+
+# virt: lxd             # use an lxd container
+# arch: amd64           # optional, this is the default, routes to a full VM
+# os: linux             # optional, this is the default
+dist: focal             # xenial is the default for travis, focal (20), jammy (22), noble (24)
+
+# Added vm size upgrade. This costs extra $s
+# vm:
+#  size: x-large
+
+language: cpp
+compiler: gcc
+
+branches:
+  only:
+  - main
+
+# This cache is used to speed up sonar scan runs. See https://docs.travis-ci.com/user/caching.
+# Each branch gets its own cache. The three different sonar scan runs each use their own cache
+# directory set in the three sonar-bes-*.properties files. jhrg 1/13/22
+cache:
+  directories:
+    - ./.cache/sonar/
+
+addons:
+  sonarcloud: true
+  apt:
+    packages:
+      - libhiredis-dev
+      - libcppunit-dev
+      - libfl-dev   # needed for focal, but not xenial. jhrg 1/18/24
+
+git:
+  depth: false
+
+services:
+  # Start the Redis server.
+  - redis-server
+
+env:
+  global:
+    - prefix=$HOME/install
+    - PATH=$prefix/bin:$prefix/deps/bin:$PATH
+
+before_install:
+  - gem install bundler
+  - pip install --user awscli
+  - java -version
+
+# hyrax-dependencies-build.tar.gz includes/makes the build directory
+install:
+
+before_script:
+  - echo "Travis default env:"
+  - printenv
+
+stages:
+  - name: build
+  - name: scan
+    if:  branch = main
+  - name: never
+    if: branch = never
+
+jobs:
+  include:
+    - stage: build
+      name: "build"
+      script:
+        - mkdir build
+        - cd build
+        - cmake .. -DCMAKE_INSTALL_PREFIX=$prefix -DCMAKE_VERBOSE_MAKEFILE=on
+        - make -j16
+        - ctest -j
+
+    - stage: never # build
+      name: "Enterprise Linux 8 (via Rocky8)"
+      script:
+        - docker run --env prefix=/root/install --volume $prefix/rpmbuild:/root/rpmbuild 
+            --volume $TRAVIS_BUILD_DIR:/root/travis
+            --env OS=rocky8
+            --env DIST=el8
+            --env LIBDAP_RPM_VERSION=$LIBDAP_RPM_VERSION
+            --env BES_BUILD_NUMBER=$BES_BUILD_NUMBER
+            --env AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+            --env AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+            opendap/rocky8_hyrax_builder:latest /root/travis/travis/build-rpm.sh
+
+    - stage: never # scan
+      name: "scan bes"
+      script:
+        - mkdir build
+        - cd build
+        - cmake ..
+        - build-wrapper-linux-x86-64 --out-dir bw-output make -j16
+        - sonar-scanner -Dproject.settings=sonar-bes-framework.properties -Dsonar.login=$SONAR_LOGIN
+        - curl -s https://sonarcloud.io/api/project_badges/quality_gate?project=opendap-bes | grep "QUALITY GATE PASS"
+
+#after_script:
+#  - ./travis/upload-test-results.sh
+#
+#before_deploy:
+#  - export DEPLOY="S3"
+#  # Make sure that we have the target dir...
+#  - mkdir -p $TRAVIS_BUILD_DIR/package;
+#  # Source distribution prep (copies both the 'version' and 'snapshot')
+#  - if test "$BES_BUILD" = "srcdist"; then cp bes-*.tar.gz $TRAVIS_BUILD_DIR/package; fi
+#  # Rocky8  distribution prep
+#  - if test "$BES_BUILD" = "rocky8"; then ./travis/rpm-to-package-dir.sh "el8"; fi
+#  # Check for the stuff...
+#  - ls -l $TRAVIS_BUILD_DIR/package
+#
+## The deploy section copies the snapshot build product our S3 bucket and to www.opendap.org
+#deploy:
+#  # Push all build results to our S3 bucket
+#  - provider: s3
+#    access_key_id: $AWS_ACCESS_KEY_ID
+#    secret_access_key: $AWS_SECRET_ACCESS_KEY
+#    bucket: opendap.travis.build
+#    skip_cleanup: true
+#    local_dir: $TRAVIS_BUILD_DIR/package
+#    on:
+#      all_branches: true
+#      condition: $BES_BUILD =~ ^rocky8|srcdist$

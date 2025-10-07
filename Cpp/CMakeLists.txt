@@ -1,10 +1,9 @@
-cmake_minimum_required(VERSION 3.10)
 
 # C++14 (works fine for all code below)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_subdirectory(unit-tests)
+# add_subdirectory(unit-tests)
 
 option(USE_ASAN "Enable Address Sanitizer" OFF)
 option(BUILD_DEVELOPER "Build in developer mode" OFF)
@@ -26,33 +25,18 @@ endif()
 
 # If hiredis isn't in a standard location, set:
 #   cmake -DHiredis_ROOT=/path/to/hiredis/install ..
-find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h)
-find_library(HIREDIS_LIB hiredis)
+find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h REQUIRED)
+find_library(HIREDIS_LIB hiredis REQUIRED)
 if (NOT HIREDIS_INCLUDE_DIR OR NOT HIREDIS_LIB)
 	message(FATAL_ERROR "Could not find hiredis. Set HIREDIS_INCLUDE_DIR/HIREDIS_LIB or install hiredis.")
 endif()
 
+message(DEBUG "Cpp HIREDIS_INCLUDE_DIR: ${HIREDIS_INCLUDE_DIR}")
+message(DEBUG "Cpp HIREDIS_LIB: ${HIREDIS_LIB}")
+
 include_directories(${HIREDIS_INCLUDE_DIR})
 
-#add_library(redis_cache
-#		RedisFileCache.cpp
-#		ScriptManager.h
-#)
-#target_link_libraries(redis_cache
-#		${HIREDIS_LIB}
-#)
-#
-## Test / stress executable
-#add_executable(RedisFileCache_Simulator
-#		RedisFileCache_Simulator.cpp
-#)
-#
-#target_link_libraries(RedisFileCache_Simulator
-#		redis_cache
-#		${HIREDIS_LIB}
-#)
-
-# The same cache with LRU eviction
+# The cache with LRU eviction
 add_library(redis_cache_lru
 		RedisFileCacheLRU.cpp
 		ScriptManager.h
@@ -75,7 +59,8 @@ target_link_libraries(RedisFileCacheLRU_Simulator
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 	target_compile_options(redis_cache_lru PRIVATE ${DEV_FLAGS})
 	target_compile_options(RedisFileCacheLRU_Simulator PRIVATE ${DEV_FLAGS})
-
-#	target_compile_options(redis_cache PRIVATE ${DEV_FLAGS})
-#	target_compile_options(RedisFileCache_Simulator PRIVATE ${DEV_FLAGS})
 endif()
+
+# It is necessary to put this here, after the HIREDIS_INCLUDE_DIR, etc., variables are
+# defined. jhrg 10/6/25
+add_subdirectory(unit-tests)
