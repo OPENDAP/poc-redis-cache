@@ -21,21 +21,18 @@ and the command ```LLEN``` and ```LRANGE```. Here's an example:
 LRANGE poc-cache:evict:log 0 10
 ```
 
-## Multi-process test: TestRedisFileCacheLRU
+## Multi-process test: RedisFileCacheLRU_Simulator
 
 What it does (like the Python harness):
 * Forks N worker processes (not threads).
 * Each worker often reads a random key from a shared Redis SET and sometimes writes (create-only) a new file and adds its key to the set.
 * Prints per-process and aggregate stats.
 * Lets you dial up collisions by shortening the random suffix length.
-* It uses the same Redis key set name: <namespace>:keys:set (default poc-cache:keys:set).
-
 
 ## Build (CMake) & Run/test
 
-This builds both versions (LRU and plain) and the test drivers for each. This
-will require that the hiredis package be installed and that it be discoverable 
-by cmake.
+This builds only the LRU version and the test driver. The 'plain' version build is in the CMakeLists file but commented out.
+This will require that the hiredis package be installed and that it be discoverable by cmake.
 
 ### Build
 ```bash
@@ -44,9 +41,9 @@ cmake ..
 make -j
 ```
 
-### Run tests
+### Run the simulator test
 
-Here's how to run the test driver for the LRU version. The plain version can be
+Here's how to run the test driver (aka Simulator) for the LRU version. The plain version can be
 run the same way - the max-bytes option will be ignored - or without ```max-bytes```.
 Look at the code to see all the options. 
 
@@ -54,14 +51,17 @@ One notable feature of the LRU test code is that setting ```processes``` to zero
 for a single process run that is easier to use in a debugger.
 
 ```bash
-./TestRedisFileCacheLRU --processes 6 --duration 30 --write-prob 0.20 --key-suffix-chars 4 --max-bytes 2000000
+./RedisFileCacheLRU_Simulator --processes 6 --duration 30 --write-prob 0.20 --key-suffix-chars 4 --max-bytes 2000000
 ```
 
+### Unit test
+The unit tests for both the LRU code and ScriptManager (Redis LUA scripts) is in 'unit-tests.' Run those in the 
+usual way. I have not hooked up ctest yet, so those have to be run by hand.
 
 ### Test cleanup
 
-The test drivers (TestRedisFileCacheLRU, ...) will remove various keys from the 
-Redis database. However, you have to clean out the cache directory by hand
+The test drivers (RedisFileCacheLRU_Simulator, ...) will remove various keys from the 
+Redis database. However, you have to clean out the cache directory by hand.
 
 ```bash
 rm -rf /tmp/poc-cache

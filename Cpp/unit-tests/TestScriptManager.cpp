@@ -7,9 +7,7 @@
 // No main() here; integrate with your existing CppUnit runner.
 
 #include "ScriptManager.h"
-
-#include <cppunit/extensions/HelperMacros.h>
-#include <cppunit/TestFixture.h>
+#include "run_tests_cppunit.h"
 
 #include <hiredis/hiredis.h>
 
@@ -109,3 +107,5 @@ class ScriptManagerTest : public CppUnit::TestFixture {
 };
 
 CPPUNIT_TEST_SUITE_REGISTRATION(ScriptManagerTest);
+
+int main(int argc, char *argv[]) { return run_tests<ScriptManagerTest>(argc, argv) ? 0 : 1; }
