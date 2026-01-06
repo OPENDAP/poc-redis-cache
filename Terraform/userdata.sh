@@ -7,23 +7,28 @@ MOUNT_POINT="${mount_point}"
 REPO_URL="${repo_url}"
 REDIS_ENDPOINT="${redis_endpoint}"
 
+# Install basic tools (no amazon-efs-utils)
 apt-get update
-apt-get install -y git python3 python3-pip nfs-common amazon-efs-utils
+apt-get install -y git python3 python3-pip nfs-common redis-tools || true
 
+# Compute EFS DNS name using *shell* vars, not template vars
+EFS_DNS="$EFS_ID.efs.$REGION.amazonaws.com"
+
+# Create mount point
 mkdir -p "$MOUNT_POINT"
 
-# Use EFS mount helper (TLS by default when 'tls' option is present)
-echo "$EFS_ID:/ $MOUNT_POINT efs _netdev,tls 0 0" >> /etc/fstab
+# Persist NFS mount in fstab and mount it
+echo "$EFS_DNS:/ $MOUNT_POINT nfs4 nfsvers=4.1,_netdev 0 0" >> /etc/fstab
 mount -a
 
-# Clone the PoC
+# Clone the PoC repo if not already present
 cd /opt
 if [ ! -d /opt/poc-redis-cache ]; then
   git clone "$REPO_URL"
 fi
 chown -R ubuntu:ubuntu /opt/poc-redis-cache || true
 
-# Prepare a shared cache dir on EFS
+# Prepare shared cache dir on EFS
 mkdir -p "$MOUNT_POINT/poc-cache"
 
 # Export env vars for all users/sessions
@@ -32,6 +37,3 @@ export REDIS_ENDPOINT="$REDIS_ENDPOINT"
 export SHARED_CACHE_DIR="$MOUNT_POINT/poc-cache"
 EOF
 chmod +x /etc/profile.d/redis_env.sh
-
-# Optional: install redis-tools so you can test connectivity easily
-apt-get install -y redis-tools || true
