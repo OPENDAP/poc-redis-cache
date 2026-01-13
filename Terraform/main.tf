@@ -223,4 +223,5 @@ resource "aws_instance" "worker" {
   })
 
   tags = { Name = "${var.project}-worker-${count.index}" }
+  depends_on = [aws_efs_mount_target.mt]
 }
