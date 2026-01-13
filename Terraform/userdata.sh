@@ -21,15 +21,58 @@ REDIS_ENDPOINT="${redis_endpoint}"
 apt-get update
 apt-get install -y git python3 python3-pip nfs-common redis-tools || true
 
-# Compute EFS DNS name using *shell* vars, not template vars
 EFS_DNS="$EFS_ID.efs.$REGION.amazonaws.com"
-
-# Create mount point
 mkdir -p "$MOUNT_POINT"
 
-# Persist NFS mount in fstab and mount it
-echo "$EFS_DNS:/ $MOUNT_POINT nfs4 nfsvers=4.1,_netdev 0 0" >> /etc/fstab
-mount -a
+# Make sure systemd-resolved is up (sometimes it's mid-transition during boot)
+systemctl is-active --quiet systemd-resolved || systemctl restart systemd-resolved || true
+
+# Wait up to 10 minutes for DNS to resolve the EFS name
+# This is, of course, a total hack. We could, instead of mounting using user-data, we could
+# create a systemd mount unit for EFS that is explicitly "After=network-online.target systemd-resolved.service"
+# that will keep retrying in the background. This loop is probably good enough for the PoC
+# code.
+DNS_OK=0
+for i in $(seq 1 120); do
+  if getent ahosts "$EFS_DNS" >/dev/null 2>&1; then
+    DNS_OK=1
+    echo "DNS ready for $EFS_DNS"
+    break
+  fi
+
+  # Every 10 tries, print resolver status to the log and kick resolved
+  if [ $((i % 10)) -eq 0 ]; then
+    echo "Still waiting for DNS ($i/120). Resolver status:"
+    resolvectl status || true
+    systemctl restart systemd-resolved || true
+  fi
+
+  sleep 5
+done
+
+if [ "$DNS_OK" -ne 1 ]; then
+  echo "ERROR: DNS never resolved $EFS_DNS. Aborting EFS mount."
+  resolvectl status || true
+  cat /etc/resolv.conf || true
+  ip route || true
+  exit 1
+fi
+
+# Avoid duplicate fstab lines
+grep -q "$EFS_DNS:/" /etc/fstab || \
+  echo "$EFS_DNS:/ $MOUNT_POINT nfs4 nfsvers=4.1,_netdev,noresvport 0 0" >> /etc/fstab
+
+# Mount with retries (now that DNS resolves)
+for i in $(seq 1 24); do
+  if mount "$MOUNT_POINT" >/dev/null 2>&1; then
+    echo "EFS mounted at $MOUNT_POINT"
+    break
+  fi
+  echo "Mount failed ($i/24), retrying..."
+  sleep 5
+done
+
+mountpoint -q "$MOUNT_POINT" || { echo "ERROR: EFS still not mounted"; exit 1; }
 
 # Clone the PoC repo if not already present
 cd /opt
