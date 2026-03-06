@@ -21,7 +21,7 @@ echo "MOUNT_POINT=$MOUNT_POINT"
 echo "REPO_URL=$REPO_URL"
 echo "REDIS_ENDPOINT=$REDIS_ENDPOINT"
 
-# Packages
+# Packages (no amazon-efs-utils)
 apt-get update -y
 apt-get install -y git python3 python3-pip nfs-common redis-tools
 

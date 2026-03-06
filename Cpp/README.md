@@ -44,7 +44,7 @@ make -j
 ### Run the simulator test
 
 Here's how to run the test driver (aka Simulator) for the LRU version. The plain version can be
-run the same way - the max-bytes option will be ignored - or without ```max-bytes```.
+run the same way – the max-bytes option will be ignored – or without ```max-bytes```.
 Look at the code to see all the options. 
 
 One notable feature of the LRU test code is that setting ```processes``` to zero will
