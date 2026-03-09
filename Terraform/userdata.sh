@@ -1,15 +1,9 @@
 #!/bin/bash
-#
-# Note: This looks like a regular bash script, but it's actually a terraform template
-# file that will build text passed to an EC2 instance as 'user data' Then cloud-init
-# on the Ubuntu instance runs it during the instance’s first boot. The placeholders
-# like ${region}, ${efs_id} in the block below get their values from main.tf at plan/apply
-# time (they are not shell variables).
-#
-# To debug this, look at log data in /var/log/cloud-init.log and, particularly,
-# /var/log/cloud-init-output.log.
+set -uox pipefail
+export DEBIAN_FRONTEND=noninteractive
 
-set -eux
+# Log everything (even early failures)
+exec > >(tee -a /var/log/userdata.log) 2>&1
 
 REGION="${region}"
 EFS_ID="${efs_id}"
@@ -17,76 +11,76 @@ MOUNT_POINT="${mount_point}"
 REPO_URL="${repo_url}"
 REDIS_ENDPOINT="${redis_endpoint}"
 
-# Install basic tools (no amazon-efs-utils)
-apt-get update
-apt-get install -y git python3 python3-pip nfs-common redis-tools || true
-
 EFS_DNS="$EFS_ID.efs.$REGION.amazonaws.com"
+
+echo "=== userdata start $(date -Is) ==="
+echo "REGION=$REGION"
+echo "EFS_ID=$EFS_ID"
+echo "EFS_DNS=$EFS_DNS"
+echo "MOUNT_POINT=$MOUNT_POINT"
+echo "REPO_URL=$REPO_URL"
+echo "REDIS_ENDPOINT=$REDIS_ENDPOINT"
+
+# Packages (no amazon-efs-utils)
+apt-get update -y
+apt-get install -y git python3 python3-pip nfs-common redis-tools
+
+# Ensure mount point exists
 mkdir -p "$MOUNT_POINT"
 
-# Make sure systemd-resolved is up (sometimes it's mid-transition during boot)
-systemctl is-active --quiet systemd-resolved || systemctl restart systemd-resolved || true
-
-# Wait up to 10 minutes for DNS to resolve the EFS name
-# This is, of course, a total hack. We could, instead of mounting using user-data, we could
-# create a systemd mount unit for EFS that is explicitly "After=network-online.target systemd-resolved.service"
-# that will keep retrying in the background. This loop is probably good enough for the PoC
-# code.
-DNS_OK=0
-for i in $(seq 1 120); do
-  if getent ahosts "$EFS_DNS" >/dev/null 2>&1; then
-    DNS_OK=1
-    echo "DNS ready for $EFS_DNS"
-    break
-  fi
-
-  # Every 10 tries, print resolver status to the log and kick resolved
-  if [ $((i % 10)) -eq 0 ]; then
-    echo "Still waiting for DNS ($i/120). Resolver status:"
-    resolvectl status || true
-    systemctl restart systemd-resolved || true
-  fi
-
-  sleep 5
-done
-
-if [ "$DNS_OK" -ne 1 ]; then
-  echo "ERROR: DNS never resolved $EFS_DNS. Aborting EFS mount."
-  resolvectl status || true
-  cat /etc/resolv.conf || true
-  ip route || true
-  exit 1
+# Write fstab once (NO automount; just standard mount)
+FSTAB_LINE="$EFS_DNS:/ $MOUNT_POINT nfs4 nfsvers=4.1,_netdev,noresvport,timeo=60,retrans=2 0 0"
+if ! grep -qF "$EFS_DNS:/" /etc/fstab; then
+  echo "$FSTAB_LINE" >> /etc/fstab
 fi
 
-# Avoid duplicate fstab lines
-grep -q "$EFS_DNS:/" /etc/fstab || \
-  echo "$EFS_DNS:/ $MOUNT_POINT nfs4 nfsvers=4.1,_netdev,noresvport 0 0" >> /etc/fstab
+# Optional: wait a bit for networking/DNS/EFS targets to be ready
+sleep 60
 
-# Mount with retries (now that DNS resolves)
-for i in $(seq 1 24); do
-  if mount "$MOUNT_POINT" >/dev/null 2>&1; then
-    echo "EFS mounted at $MOUNT_POINT"
+# Keep trying the exact mount command until it works (up to ~1 minutes)
+for i in $(seq 1 300); do
+  if mountpoint -q "$MOUNT_POINT"; then
+    echo "EFS already mounted at $MOUNT_POINT"
     break
   fi
-  echo "Mount failed ($i/24), retrying..."
-  sleep 5
+
+  echo "Attempt $i: mounting $EFS_DNS:/ to $MOUNT_POINT"
+  if mount -t nfs4 -o nfsvers=4.1,noresvport,timeo=60,retrans=2 "$EFS_DNS:/" "$MOUNT_POINT"; then
+    echo "Mounted OK on attempt $i"
+    break
+  fi
+
+  echo "Mount failed (attempt $i). resolv.conf:"
+  cat /etc/resolv.conf || true
+  sleep 2
 done
 
-mountpoint -q "$MOUNT_POINT" || { echo "ERROR: EFS still not mounted"; exit 1; }
+if ! mountpoint -q "$MOUNT_POINT"; then
+  echo "ERROR: EFS never mounted. Giving up."
+  # Don't exit nonzero so instance still comes up for inspection
+else
+  echo "EFS mount confirmed:"
+  mount | grep "$MOUNT_POINT" || true
+  df -h | grep "$MOUNT_POINT" || true
+fi
 
-# Clone the PoC repo if not already present
+# Clone repo
+mkdir -p /opt
 cd /opt
 if [ ! -d /opt/poc-redis-cache ]; then
-  git clone "$REPO_URL"
+  git clone "$REPO_URL" poc-redis-cache
 fi
 chown -R ubuntu:ubuntu /opt/poc-redis-cache || true
 
-# Prepare shared cache dir on EFS
-mkdir -p "$MOUNT_POINT/poc-cache"
+# Prepare shared cache dir on EFS (will be on EFS if mounted, else local)
+mkdir -p "$MOUNT_POINT/poc-cache" || true
+chown -R ubuntu:ubuntu "$MOUNT_POINT/poc-cache" || true
 
-# Export env vars for all users/sessions
+# Export env vars
 cat >/etc/profile.d/redis_env.sh <<EOF
 export REDIS_ENDPOINT="$REDIS_ENDPOINT"
 export SHARED_CACHE_DIR="$MOUNT_POINT/poc-cache"
 EOF
 chmod +x /etc/profile.d/redis_env.sh
+
+echo "=== userdata end $(date -Is) ==="
