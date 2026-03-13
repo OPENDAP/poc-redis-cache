@@ -60,6 +60,14 @@ Here's what you’ll get:
 
 ## Running the PoC tests
 
+The worker nodes all start N processes that run the C++ simulator using the userdata.sh
+shell script. You can see the output from that shell script by logging into one of the
+nodes and running:
+
+```bash
+more /var/log/userdata.log
+```
+
 SSH into each worker (this is optional but could be useful):
 
 ```bash
