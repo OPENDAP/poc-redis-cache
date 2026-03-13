@@ -1,0 +1,36 @@
+PID 3921 it=1877 R(ok/busy/miss)=1619/0/2 Rbytes=3483553 W(ok/busy/exist)=253/0/3 Wbytes=553561 other=0
+PID 3924 it=1622 R(ok/busy/miss)=1359/0/2 Rbytes=2984037 W(ok/busy/exist)=259/0/2 Wbytes=557087 other=0
+PID 3922 it=1748 R(ok/busy/miss)=1488/0/0 Rbytes=3205119 W(ok/busy/exist)=259/0/1 Wbytes=540736 other=0
+PID 3923 it=1652 R(ok/busy/miss)=1388/0/2 Rbytes=2977362 W(ok/busy/exist)=260/0/2 Wbytes=570628 other=0
+[monitor t=0s] total_bytes=0 keys=0 cap=1000000
+[monitor t=10s] total_bytes=84904 keys=37 cap=1000000
+[monitor t=20s] total_bytes=161629 keys=71 cap=1000000
+[monitor t=30s] total_bytes=225826 keys=105 cap=1000000
+[monitor t=40s] total_bytes=305272 keys=142 cap=1000000
+[monitor t=50s] total_bytes=373028 keys=175 cap=1000000
+[monitor t=60s] total_bytes=439522 keys=209 cap=1000000
+[monitor t=70s] total_bytes=514170 keys=242 cap=1000000
+[monitor t=80s] total_bytes=601444 keys=276 cap=1000000
+[monitor t=90s] total_bytes=676395 keys=310 cap=1000000
+[monitor t=100s] total_bytes=747536 keys=345 cap=1000000
+[monitor t=110s] total_bytes=816880 keys=380 cap=1000000
+[monitor t=120s] total_bytes=887673 keys=416 cap=1000000
+[monitor t=130s] total_bytes=962681 keys=449 cap=1000000
+[monitor t=140s] total_bytes=832085 keys=386 cap=1000000
+[monitor t=150s] total_bytes=914221 keys=421 cap=1000000
+[monitor t=160s] total_bytes=988472 keys=455 cap=1000000
+[monitor t=170s] total_bytes=856254 keys=393 cap=1000000
+[monitor t=180s] total_bytes=927902 keys=428 cap=1000000
+[monitor t=190s] total_bytes=889282 keys=406 cap=1000000
+[monitor t=200s] total_bytes=877568 keys=401 cap=1000000
+[monitor t=210s] total_bytes=964290 keys=435 cap=1000000
+[monitor t=220s] total_bytes=828182 keys=368 cap=1000000
+[monitor t=230s] total_bytes=895835 keys=404 cap=1000000
+[monitor t=240s] total_bytes=964867 keys=439 cap=1000000
+[monitor t=250s] total_bytes=828346 keys=384 cap=1000000
+[monitor t=260s] total_bytes=905639 keys=419 cap=1000000
+[monitor t=270s] total_bytes=987990 keys=453 cap=1000000
+[monitor t=280s] total_bytes=847982 keys=391 cap=1000000
+[monitor t=290s] total_bytes=914036 keys=425 cap=1000000
+[monitor t=300s] total_bytes=977854 keys=459 cap=1000000
+[monitor t=310s] total_bytes=977854 keys=459 cap=1000000
