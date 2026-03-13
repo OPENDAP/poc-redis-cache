@@ -94,6 +94,6 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 
 # Run RedisFileCacheLRU_Simulator
-./build/RedisFileCacheLRU_Simulator --duration 300 --redis-endpoint "$REDIS_ENDPOINT" --cache-dir "$MOUNT_POINT/poc-cache" > /opt/simulator.log 2>&1 &
+./build/RedisFileCacheLRU_Simulator --duration 300 --redis-endpoint "$REDIS_ENDPOINT" --cache-dir "$MOUNT_POINT/poc-cache" --debug > /opt/simulator.log 2>&1 &
 
 echo "=== userdata end $(date -Is) ==="
