@@ -1,0 +1,6 @@
+Tests run on 3/13/26 using ten nodes, four worker processes per node.
+
+The startup command for the ten nodes was:
+
+OPTIONS="--duration 300 --monitor-ms 10000 --blocking --read-sleep 20 --write-sleep 1000 --max-bytes 1000000"
+./build/RedisFileCacheLRU_Simulator $OPTIONS --redis-endpoint "$REDIS_ENDPOINT" --cache-dir "$MOUNT_POINT/poc-cache" > /opt/simulator.log 2>&1 &
