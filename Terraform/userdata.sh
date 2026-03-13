@@ -22,8 +22,12 @@ echo "REPO_URL=$REPO_URL"
 echo "REDIS_ENDPOINT=$REDIS_ENDPOINT"
 
 # Packages (no amazon-efs-utils)
+DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y git python3 python3-pip nfs-common redis-tools
+apt-get install -y git python3 python3-pip nfs-common 
+apt-get install -y build-essential cmake git pkg-config 
+apt-get install -y libhiredis-dev libcppunit-dev
+apt-get install -y redis-tools redis-server
 
 # Ensure mount point exists
 mkdir -p "$MOUNT_POINT"
@@ -51,7 +55,7 @@ for i in $(seq 1 300); do
   fi
 
   echo "Mount failed (attempt $i). resolv.conf:"
-  cat /etc/resolv.conf || true
+  cat /etc/resolv.conf
   sleep 2
 done
 
@@ -60,8 +64,8 @@ if ! mountpoint -q "$MOUNT_POINT"; then
   # Don't exit nonzero so instance still comes up for inspection
 else
   echo "EFS mount confirmed:"
-  mount | grep "$MOUNT_POINT" || true
-  df -h | grep "$MOUNT_POINT" || true
+  mount | grep "$MOUNT_POINT"
+  df -h | grep "$MOUNT_POINT"
 fi
 
 # Clone repo
@@ -70,11 +74,11 @@ cd /opt
 if [ ! -d /opt/poc-redis-cache ]; then
   git clone "$REPO_URL" poc-redis-cache
 fi
-chown -R ubuntu:ubuntu /opt/poc-redis-cache || true
+chown -R ubuntu:ubuntu /opt/poc-redis-cache
 
 # Prepare shared cache dir on EFS (will be on EFS if mounted, else local)
-mkdir -p "$MOUNT_POINT/poc-cache" || true
-chown -R ubuntu:ubuntu "$MOUNT_POINT/poc-cache" || true
+mkdir -p "$MOUNT_POINT/poc-cache"
+chown -R ubuntu:ubuntu "$MOUNT_POINT/poc-cache"
 
 # Export env vars
 cat >/etc/profile.d/redis_env.sh <<EOF
@@ -82,5 +86,14 @@ export REDIS_ENDPOINT="$REDIS_ENDPOINT"
 export SHARED_CACHE_DIR="$MOUNT_POINT/poc-cache"
 EOF
 chmod +x /etc/profile.d/redis_env.sh
+
+# Build the C++ cache and test program
+cd /opt/poc-redis-cache/Cpp
+
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+
+# Run RedisFileCacheLRU_Simulator
+./build/RedisFileCacheLRU_Simulator --duration 300 --redis-endpoint "$REDIS_ENDPOINT" --cache-dir "$MOUNT_POINT/poc-cache" > /opt/simulator.log 2>&1 &
 
 echo "=== userdata end $(date -Is) ==="
