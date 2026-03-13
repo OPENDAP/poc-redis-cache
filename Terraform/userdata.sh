@@ -96,7 +96,7 @@ cmake --build build -j
 # Run RedisFileCacheLRU_Simulator
 # The simulator makes entries that are between 200 and 4000 bytes (approximately). If we want about 1,000 objects,
 # set max bytes to about 2MB. 
-OPTIONS="--duration 300 --blocking --read-sleep=20 --write-sleep=1000 --max-bytes=2000000"
+OPTIONS="--duration 300 --monitor-ms=10000 --blocking --read-sleep=20 --write-sleep=1000 --max-bytes=2000000"
 ./build/RedisFileCacheLRU_Simulator $OPTIONS --redis-endpoint "$REDIS_ENDPOINT" --cache-dir "$MOUNT_POINT/poc-cache" > /opt/simulator.log 2>&1 &
     
 echo "=== userdata end $(date -Is) ==="
