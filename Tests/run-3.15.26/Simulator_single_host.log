@@ -1,0 +1,39 @@
+NOT USED 3/16.26
+
+[monitor t=0s] total_bytes=1703760 keys=782 cap=2000000
+[monitor t=1s] total_bytes=1952872 keys=910 cap=2000000
+[monitor t=2s] total_bytes=1805909 keys=824 cap=2000000
+[monitor t=3s] total_bytes=2117097 keys=963 cap=2000000
+[monitor t=4s] total_bytes=1844239 keys=836 cap=2000000
+[monitor t=5s] total_bytes=2161256 keys=984 cap=2000000
+[monitor t=6s] total_bytes=1785754 keys=826 cap=2000000
+[monitor t=7s] total_bytes=2057656 keys=956 cap=2000000
+[monitor t=8s] total_bytes=1762198 keys=824 cap=2000000
+[monitor t=9s] total_bytes=2081536 keys=968 cap=2000000
+[monitor t=10s] total_bytes=1762464 keys=828 cap=2000000
+[monitor t=11s] total_bytes=2052314 keys=962 cap=2000000
+[monitor t=12s] total_bytes=1728931 keys=813 cap=2000000
+[monitor t=13s] total_bytes=2025240 keys=951 cap=2000000
+[monitor t=14s] total_bytes=1704064 keys=794 cap=2000000
+[monitor t=15s] total_bytes=2001207 keys=932 cap=2000000
+[monitor t=16s] total_bytes=1704960 keys=800 cap=2000000
+[monitor t=17s] total_bytes=2023532 keys=941 cap=2000000
+[monitor t=18s] total_bytes=1683298 keys=789 cap=2000000
+[monitor t=19s] total_bytes=1965234 keys=921 cap=2000000
+[monitor t=20s] total_bytes=1672291 keys=795 cap=2000000
+[monitor t=21s] total_bytes=1924729 keys=917 cap=2000000
+[monitor t=22s] total_bytes=1648284 keys=785 cap=2000000
+[monitor t=23s] total_bytes=1980676 keys=926 cap=2000000
+[monitor t=24s] total_bytes=1633163 keys=756 cap=2000000
+[monitor t=25s] total_bytes=1889859 keys=876 cap=2000000
+[monitor t=26s] total_bytes=2065073 keys=950 cap=2000000
+[monitor t=27s] total_bytes=2333987 keys=1083 cap=2000000
+[monitor t=28s] total_bytes=1778907 keys=841 cap=2000000
+[monitor t=29s] total_bytes=1873905 keys=880 cap=2000000
+PID 40080 it=3268 R(ok/busy/miss)=2603/0/0 Rbytes=5530959 W(ok/busy/exist)=664/0/1 Wbytes=1404896 other=0
+PID 40081 it=3243 R(ok/busy/miss)=2576/0/0 Rbytes=5581549 W(ok/busy/exist)=665/0/2 Wbytes=1456529 other=0
+PID 40083 it=3320 R(ok/busy/miss)=2680/0/0 Rbytes=5758918 W(ok/busy/exist)=640/0/0 Wbytes=1366233 other=0
+PID 40079 it=3271 R(ok/busy/miss)=2602/0/0 Rbytes=5553777 W(ok/busy/exist)=669/0/0 Wbytes=1429643 other=0
+PID 40078 it=3265 R(ok/busy/miss)=2594/0/0 Rbytes=5603963 W(ok/busy/exist)=670/0/1 Wbytes=1488361 other=0
+PID 40082 it=3218 R(ok/busy/miss)=2536/0/0 Rbytes=5435183 W(ok/busy/exist)=681/0/1 Wbytes=1427397 other=0
+[monitor t=30s] total_bytes=2119234 keys=987 cap=2000000

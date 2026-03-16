@@ -27,12 +27,7 @@ cd poc-cache-aws
 cp terraform.tfvars.example terraform.tfvars
 
 terraform init
-
-# Default:
 terraform apply -auto-approve
-# EC2 option:
-terraform plan -var="redis_mode=ec2"
-terraform apply -auto-approve -var="redis_mode=ec2"
 
 # Show outputs
 terraform output
@@ -41,8 +36,7 @@ terraform output
 Here's what you’ll get:
 - `worker_public_ips`: Public IPs of the worker EC2 instances
 - `efs_id` and `efs_dns`: EFS identifiers
-- `redis_endpoint`: Hostname/IP workers should use to reach Redis
-- `redis_public_ip`: Public IP for SSH when `redis_mode = "ec2"`
+- `redis_endpoint`: Hostname/IP to use as the Redis server
 
 ## Stuff that gets provisioned
 
@@ -50,7 +44,7 @@ Here's what you’ll get:
 - **Security Groups:**
   - Workers SG (allows SSH from anywhere for testing)
   - EFS SG (allows NFS/2049 *from workers SG only*)
-  - Redis SG (allows SSH for testing and 6379 *from workers SG only*)
+  - Redis SG (allows 6379 *from workers SG only*)
 - **EFS** file system + mount targets in both subnets
 - **Redis**: either ElastiCache (managed, encrypted) or a tiny EC2 with Dockerized Redis
 - **Workers**: Ubuntu 22.04 instances that:
@@ -60,14 +54,6 @@ Here's what you’ll get:
   - export `REDIS_ENDPOINT` and `SHARED_CACHE_DIR` for all users
 
 ## Running the PoC tests
-
-The worker nodes all start N processes that run the C++ simulator using the userdata.sh
-shell script. You can see the output from that shell script by logging into one of the
-nodes and running:
-
-```bash
-more /var/log/userdata.log
-```
 
 SSH into each worker (this is optional but could be useful):
 
@@ -133,4 +119,3 @@ See `variables.tf` or `terraform.tfvars.example` for all variables.
 - `efs_id`
 - `efs_dns`
 - `redis_endpoint`
-- `redis_public_ip` (EC2 mode only)

@@ -1,5 +1,15 @@
-Cpp/build/
+.idea/**
+build/**
+
+Cpp/.idea/**
+Cpp/build/**
 Cpp/test_poc_cache_mproc_hiredis
 
-Cpp/redis-plus-plus/build/
-Cpp/redis-plus-plus/install/
+Cpp/redis-plus-plus/build/**
+Cpp/redis-plus-plus/install/**
+
+Terraform/.terraform/**
+Terraform/.terraform.lock.hcl
+Terraform/terraform.tfstate
+Terraform/terraform.tfstate.backup 
+

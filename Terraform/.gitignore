@@ -1,2 +1,4 @@
 # Never check these in since they might have credentials. jhrg 1/12/26
 *.tfvars
+
+plan*

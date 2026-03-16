@@ -10,6 +10,7 @@ EFS_ID="${efs_id}"
 MOUNT_POINT="${mount_point}"
 REPO_URL="${repo_url}"
 REDIS_ENDPOINT="${redis_endpoint}"
+REDIS_MODE="${redis_mode}"
 
 EFS_DNS="$EFS_ID.efs.$REGION.amazonaws.com"
 
@@ -20,6 +21,7 @@ echo "EFS_DNS=$EFS_DNS"
 echo "MOUNT_POINT=$MOUNT_POINT"
 echo "REPO_URL=$REPO_URL"
 echo "REDIS_ENDPOINT=$REDIS_ENDPOINT"
+echo "REDIS_MODE=$REDIS_MODE"
 
 # Packages (no amazon-efs-utils)
 DEBIAN_FRONTEND=noninteractive
@@ -27,7 +29,7 @@ apt-get update -y
 apt-get install -y git python3 python3-pip nfs-common 
 apt-get install -y build-essential cmake git pkg-config 
 apt-get install -y libhiredis-dev libcppunit-dev
-apt-get install -y redis-tools redis-server
+apt-get install -y redis-tools
 
 # Ensure mount point exists
 mkdir -p "$MOUNT_POINT"
@@ -73,6 +75,8 @@ mkdir -p /opt
 cd /opt
 if [ ! -d /opt/poc-redis-cache ]; then
   git clone "$REPO_URL" poc-redis-cache
+  # FIXME UNDO this hack. jhrg 3/16/26
+  git checkout jhrg/sim-bug-fix
 fi
 chown -R ubuntu:ubuntu /opt/poc-redis-cache
 
@@ -87,16 +91,35 @@ export SHARED_CACHE_DIR="$MOUNT_POINT/poc-cache"
 EOF
 chmod +x /etc/profile.d/redis_env.sh
 
+# For the EC2-backed Redis host, wait until the instance has finished booting Redis
+# before starting the simulator. Without this, workers can exit early on first boot.
+if [ "$REDIS_MODE" = "ec2" ]; then
+  for i in $(seq 1 120); do
+    if redis-cli -h "$REDIS_ENDPOINT" -p 6379 ping >/dev/null 2>&1; then
+      echo "Redis is reachable at $REDIS_ENDPOINT:6379"
+      break
+    fi
+
+    echo "Attempt $i: waiting for Redis at $REDIS_ENDPOINT:6379"
+    sleep 2
+  done
+fi
+
 # Build the C++ cache and test program
-cd /opt/poc-redis-cache/Cpp
+# FIXME? This should be /opt/poc-redis-cache/ since the top level CMakeLists file is there. jhrg 3/16/26
+# cd /opt/poc-redis-cache/Cpp
+cd /opt/poc-redis-cache
 
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
+
+# cd to the built simulator code. jhrg 3/16/26
+cd build/Cpp
 
 # Run RedisFileCacheLRU_Simulator
 # The simulator makes entries that are between 200 and 4000 bytes (approximately). If we want about 1,000 objects,
 # set max bytes to about 2MB. 
 OPTIONS="--duration 300 --monitor-ms 10000 --blocking --read-sleep 20 --write-sleep 1000 --max-bytes 1000000"
-./build/RedisFileCacheLRU_Simulator $OPTIONS --redis-endpoint "$REDIS_ENDPOINT" --cache-dir "$MOUNT_POINT/poc-cache" > /opt/simulator.log 2>&1 &
+./RedisFileCacheLRU_Simulator $OPTIONS --redis-host "$REDIS_ENDPOINT" --redis-port 6379 --cache-dir "$MOUNT_POINT/poc-cache" > /opt/simulator.log 2>&1 &
     
 echo "=== userdata end $(date -Is) ==="

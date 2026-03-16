@@ -215,6 +215,7 @@ The simulator currently parses these options:
 | `--redis-port <port>` | Redis TCP port. | `6379` |
 | `--redis-db <db>` | Redis logical DB. | `0` |
 | `--namespace <ns>` | Redis key namespace prefix. | `poc-cache` |
+| `--clean-start` | Clear Redis state for the namespace before starting. Use only for isolated/local runs, not on every node in a shared run. | off |
 | `--write-prob <p>` | Probability that an iteration is a write instead of a read. | `0.15` |
 | `--read-sleep <ms>` | Sleep after each read attempt. | `5` |
 | `--write-sleep <ms>` | Sleep after each write attempt. | `20` |
@@ -310,8 +311,8 @@ That makes it a practical inspection tool for lock and eviction behavior without
 
 ### Current simulator caveats
 
-- Startup cleanup clears `keys:set`, `idx:lru`, `idx:size`, and `idx:total`, but the code computes `evict_log_key` and then deletes `total_key` a second time instead of deleting the eviction log key.
-- The simulator expects `--redis-host`; any wrapper that passes `--redis-endpoint` will not configure Redis correctly.
+- Namespace cleanup is now opt-in via `--clean-start`; for shared multi-node runs, start from a fresh Redis/cache deployment instead of having every node clear the namespace on startup.
+- The simulator expects `--redis-host` plus `--redis-port`; wrappers should pass those explicitly.
 
 ## Legacy Subdirectories
 
