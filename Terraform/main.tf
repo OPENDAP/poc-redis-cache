@@ -13,7 +13,7 @@ resource "aws_vpc" "this" {
   cidr_block           = var.vpc_cidr
   enable_dns_support   = true
   enable_dns_hostnames = true
-  tags = { Name = "${var.project}-vpc" }
+  tags                 = { Name = "${var.project}-vpc" }
 }
 
 resource "aws_internet_gateway" "igw" {
@@ -30,7 +30,7 @@ resource "aws_subnet" "public" {
   cidr_block              = cidrsubnet(var.vpc_cidr, 8, count.index)
   availability_zone       = data.aws_availability_zones.azs.names[count.index]
   map_public_ip_on_launch = true
-  tags = { Name = "${var.project}-public-${count.index}" }
+  tags                    = { Name = "${var.project}-public-${count.index}" }
 }
 
 resource "aws_route_table" "public" {
@@ -100,10 +100,19 @@ resource "aws_security_group" "efs" {
 }
 
 # Redis access SG (used by ElastiCache or Redis EC2)
+# Allow SSH access to the host running Redis. jhrg 3/16/26
 resource "aws_security_group" "redis" {
   name        = "${var.project}-redis-sg"
   description = "Redis access"
   vpc_id      = aws_vpc.this.id
+
+  # SSH for convenience (optional)
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   # Redis TCP 6379 from workers
   ingress {
@@ -192,7 +201,7 @@ resource "aws_instance" "redis" {
   vpc_security_group_ids      = [aws_security_group.redis.id]
   associate_public_ip_address = true
   key_name                    = var.key_name
-  user_data = <<-EOF
+  user_data                   = <<-EOF
     #!/bin/bash
     set -eux
     apt-get update
@@ -200,7 +209,7 @@ resource "aws_instance" "redis" {
     systemctl enable --now docker
     docker run --name redis-server -d -p 6379:6379 redis
   EOF
-  tags = { Name = "${var.project}-redis" }
+  tags                        = { Name = "${var.project}-redis" }
 }
 
 # --- Worker instances (your app/test nodes) ---
@@ -218,10 +227,10 @@ resource "aws_instance" "worker" {
     efs_id         = aws_efs_file_system.this.id
     mount_point    = "/mnt/shared"
     repo_url       = "https://github.com/OPENDAP/poc-redis-cache.git"
-    redis_endpoint = var.redis_mode == "elasticache" ? aws_elasticache_replication_group.redis[0].primary_endpoint_address : aws_instance.redis[0].public_ip
+    redis_endpoint = var.redis_mode == "elasticache" ? aws_elasticache_replication_group.redis[0].primary_endpoint_address : aws_instance.redis[0].private_ip
     redis_mode     = var.redis_mode
   })
 
-  tags = { Name = "${var.project}-worker-${count.index}" }
+  tags       = { Name = "${var.project}-worker-${count.index}" }
   depends_on = [aws_efs_mount_target.mt]
 }

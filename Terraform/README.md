@@ -41,7 +41,8 @@ terraform output
 Here's what you’ll get:
 - `worker_public_ips`: Public IPs of the worker EC2 instances
 - `efs_id` and `efs_dns`: EFS identifiers
-- `redis_endpoint`: Hostname/IP to use as the Redis server
+- `redis_endpoint`: Hostname/IP workers should use to reach Redis
+- `redis_public_ip`: Public IP for SSH when `redis_mode = "ec2"`
 
 ## Stuff that gets provisioned
 
@@ -49,7 +50,7 @@ Here's what you’ll get:
 - **Security Groups:**
   - Workers SG (allows SSH from anywhere for testing)
   - EFS SG (allows NFS/2049 *from workers SG only*)
-  - Redis SG (allows 6379 *from workers SG only*)
+  - Redis SG (allows SSH for testing and 6379 *from workers SG only*)
 - **EFS** file system + mount targets in both subnets
 - **Redis**: either ElastiCache (managed, encrypted) or a tiny EC2 with Dockerized Redis
 - **Workers**: Ubuntu 22.04 instances that:
@@ -132,3 +133,4 @@ See `variables.tf` or `terraform.tfvars.example` for all variables.
 - `efs_id`
 - `efs_dns`
 - `redis_endpoint`
+- `redis_public_ip` (EC2 mode only)

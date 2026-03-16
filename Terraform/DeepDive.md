@@ -53,13 +53,15 @@ Three security groups separate the major traffic patterns:
   - inbound NFS on port `2049` from the workers security group only
   - all outbound traffic allowed
 - `redis`
+  - inbound SSH on port `22` from `0.0.0.0/0`
   - inbound Redis on port `6379` from the workers security group only
   - all outbound traffic allowed
 
 This means:
 
 - workers can talk to EFS and Redis
-- Redis is not directly open to the public internet
+- the Redis EC2 host can be reached over SSH for debugging in `ec2` mode
+- Redis is not directly open to the public internet on port `6379`
 - worker SSH is currently wide open unless you restrict it with your own changes
 
 ### Shared storage
@@ -108,6 +110,17 @@ Bootstrap behavior:
 
 This mode is cheaper and simpler, but much less managed.
 
+When `redis_mode = "ec2"`, the Terraform code now treats the Redis node as an
+internal VPC service for worker-to-worker traffic:
+
+- workers connect to `aws_instance.redis[0].private_ip`
+- operators can still SSH to the Redis host using `aws_instance.redis[0].public_ip`
+
+That distinction matters. The workers and the Redis EC2 instance all live in the same
+VPC, so worker traffic should stay on the private network. Using the Redis instance's
+public IP from the workers can fail or time out even though both instances have public
+addresses.
+
 ### Worker nodes
 
 `aws_instance.worker` launches `var.worker_count` Ubuntu 22.04 instances.
@@ -119,6 +132,9 @@ Each worker:
 - optionally attaches the configured EC2 key pair
 - receives rendered `userdata.sh`
 - waits for EFS mount targets before starting
+- receives the Redis endpoint as:
+  - ElastiCache primary endpoint in `elasticache` mode
+  - Redis EC2 private IP in `ec2` mode
 
 The AMI lookup is dynamic and uses Canonical’s Ubuntu 22.04 images.
 
@@ -137,7 +153,6 @@ The worker bootstrap script is the most important operational part of the Terraf
    - `libhiredis-dev`
    - `libcppunit-dev`
    - `redis-tools`
-   - `redis-server`
 3. Creates the EFS mount point
 4. Adds an `/etc/fstab` entry for the EFS filesystem
 5. Waits 60 seconds, then retries the EFS mount up to 300 times
@@ -146,8 +161,9 @@ The worker bootstrap script is the most important operational part of the Terraf
 8. Exports environment variables for login shells:
    - `REDIS_ENDPOINT`
    - `SHARED_CACHE_DIR`
-9. Builds the C++ code in `/opt/poc-redis-cache/Cpp`
-10. Launches `RedisFileCacheLRU_Simulator` in the background and redirects output to `/opt/simulator.log`
+9. If using EC2-backed Redis, polls `redis-cli ... ping` until the Redis node is reachable
+10. Builds the C++ code in `/opt/poc-redis-cache`
+11. Launches `RedisFileCacheLRU_Simulator` in the background and redirects output to `/opt/simulator.log`
 
 ### Why this matches the C++ design
 
@@ -160,6 +176,10 @@ The Terraform stack provides exactly those two primitives:
 
 - EFS for shared files
 - Redis for distributed lock and index state
+
+For the EC2-backed Redis case, "reachable by all workers" specifically means
+"reachable on the Redis instance's private IP inside the VPC." That is now what
+`REDIS_ENDPOINT` contains for worker startup.
 
 ## Variables
 
@@ -185,12 +205,14 @@ The current inputs are intentionally small:
 - `efs_id`
 - `efs_dns`
 - `redis_endpoint`
+- `redis_public_ip`
 
 These are enough to:
 
 - SSH to workers
 - verify EFS addressing
-- point clients to Redis
+- point workers to Redis using the internal address
+- SSH to the Redis EC2 host in `ec2` mode
 
 ## End-to-End Runtime Model
 
@@ -213,10 +235,30 @@ A few details are worth calling out because they affect whether the provisioned 
 `userdata.sh` now launches the simulator with:
 
 ```bash
-./build/RedisFileCacheLRU_Simulator ... --redis-host "$REDIS_ENDPOINT" --redis-port 6379
+./build/Cpp/RedisFileCacheLRU_Simulator ... --redis-host "$REDIS_ENDPOINT" --redis-port 6379
 ```
 
 That matches the current simulator CLI. For shared multi-node runs, the simulator should not be started with `--clean-start` on every node; instead, rely on a fresh Terraform deployment and destroy the stack after the run.
+
+In `ec2` Redis mode, the worker bootstrap now waits for Redis to answer a `PING`
+before launching the simulator. This avoids a boot-order race where workers come
+up before the Redis Docker container is listening and then fail early with
+connection timeouts.
+
+### Private vs. public Redis addressing
+
+This is the key operational rule for the EC2-backed Redis deployment:
+
+- workers must use the Redis instance's private IP address
+- humans use the Redis instance's public IP address for SSH
+
+Terraform now reflects that split directly:
+
+- `redis_endpoint` is the private IP in `ec2` mode
+- `redis_public_ip` is exported separately for operator access
+
+If a worker is configured to use the Redis host's public IP instead, connection
+attempts may time out even though the Redis instance itself is healthy.
 
 ### ElastiCache transit encryption mismatch
 

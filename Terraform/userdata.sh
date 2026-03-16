@@ -10,6 +10,7 @@ EFS_ID="${efs_id}"
 MOUNT_POINT="${mount_point}"
 REPO_URL="${repo_url}"
 REDIS_ENDPOINT="${redis_endpoint}"
+REDIS_MODE="${redis_mode}"
 
 EFS_DNS="$EFS_ID.efs.$REGION.amazonaws.com"
 
@@ -20,6 +21,7 @@ echo "EFS_DNS=$EFS_DNS"
 echo "MOUNT_POINT=$MOUNT_POINT"
 echo "REPO_URL=$REPO_URL"
 echo "REDIS_ENDPOINT=$REDIS_ENDPOINT"
+echo "REDIS_MODE=$REDIS_MODE"
 
 # Packages (no amazon-efs-utils)
 DEBIAN_FRONTEND=noninteractive
@@ -88,6 +90,20 @@ export REDIS_ENDPOINT="$REDIS_ENDPOINT"
 export SHARED_CACHE_DIR="$MOUNT_POINT/poc-cache"
 EOF
 chmod +x /etc/profile.d/redis_env.sh
+
+# For the EC2-backed Redis host, wait until the instance has finished booting Redis
+# before starting the simulator. Without this, workers can exit early on first boot.
+if [ "$REDIS_MODE" = "ec2" ]; then
+  for i in $(seq 1 120); do
+    if redis-cli -h "$REDIS_ENDPOINT" -p 6379 ping >/dev/null 2>&1; then
+      echo "Redis is reachable at $REDIS_ENDPOINT:6379"
+      break
+    fi
+
+    echo "Attempt $i: waiting for Redis at $REDIS_ENDPOINT:6379"
+    sleep 2
+  done
+fi
 
 # Build the C++ cache and test program
 # FIXME? This should be /opt/poc-redis-cache/ since the top level CMakeLists file is there. jhrg 3/16/26
