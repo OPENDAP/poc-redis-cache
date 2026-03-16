@@ -208,23 +208,15 @@ That makes this directory less of a generic infrastructure module and more of an
 
 A few details are worth calling out because they affect whether the provisioned environment behaves exactly as intended.
 
-### Simulator argument mismatch
+### Shared-run startup behavior
 
-`userdata.sh` launches:
+`userdata.sh` now launches the simulator with:
 
 ```bash
-./build/RedisFileCacheLRU_Simulator ... --redis-endpoint "$REDIS_ENDPOINT"
+./build/RedisFileCacheLRU_Simulator ... --redis-host "$REDIS_ENDPOINT" --redis-port 6379
 ```
 
-But the simulator parses:
-
-```text
---redis-host
---redis-port
---redis-db
-```
-
-There is no `--redis-endpoint` option in the current C++ simulator. As written, workers will ignore that flag and fall back to the simulator’s default Redis host unless the binary is changed or the script is corrected.
+That matches the current simulator CLI. For shared multi-node runs, the simulator should not be started with `--clean-start` on every node; instead, rely on a fresh Terraform deployment and destroy the stack after the run.
 
 ### ElastiCache transit encryption mismatch
 
@@ -234,7 +226,7 @@ By inference, the `ec2` Redis mode is the path most likely to work with the code
 
 ### Package overlap on workers
 
-The worker bootstrap installs `redis-server` locally even though the README says workers should use the external Redis endpoint rather than a local Redis instance. It is not started explicitly in `userdata.sh`, but the package is unnecessary for the intended architecture.
+The worker bootstrap now installs `redis-tools` but not `redis-server`, which better matches the intended architecture where workers use the external Redis endpoint rather than a local Redis instance.
 
 ### Checked-in state
 

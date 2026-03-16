@@ -12,7 +12,7 @@ variable "project" {
 # Choose redis backend: "elasticache" or "ec2"
 variable "redis_mode" {
   type    = string
-  default = "elasticache"
+  default = "ec2"
 }
 
 # EC2 instance details

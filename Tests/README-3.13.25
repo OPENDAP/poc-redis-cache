@@ -1,6 +1,18 @@
-Tests run on 3/13/26 using ten nodes, four worker processes per node.
+# General notes about the Test runs
 
 The startup command for the ten nodes was:
 
 OPTIONS="--duration 300 --monitor-ms 10000 --blocking --read-sleep 20 --write-sleep 1000 --max-bytes 1000000"
-./build/RedisFileCacheLRU_Simulator $OPTIONS --redis-endpoint "$REDIS_ENDPOINT" --cache-dir "$MOUNT_POINT/poc-cache" > /opt/simulator.log 2>&1 &
+./build/RedisFileCacheLRU_Simulator $OPTIONS --redis-host "$REDIS_ENDPOINT" --redis-port 6379 --cache-dir "$MOUNT_POINT/poc-cache" > /opt/simulator.log 2>&1 &
+
+For a shared-Redis multi-node run, do not pass `--clean-start` on every node. Start from a fresh Terraform deployment and use `terraform destroy` after the run to clear Redis and the shared cache storage.
+
+# About specific runs
+
+## Tests run on 3/13/26 using ten nodes, four worker processes per node.
+
+These tests used a version of simulator that did not use a single Redis instance. Each node had its own redis db.
+
+## Tests run on 3/16/26 (10 nodes, 4 processes per node)
+
+These tests used a fixed version of the simulator

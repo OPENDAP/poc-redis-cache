@@ -52,6 +52,34 @@ static void del(redisContext* rc, const std::string& key) {
         freeReplyObject(r);
 }
 
+static void del_matching(redisContext* rc, const std::string& pattern) {
+    std::string cursor = "0";
+    while (true) {
+        redisReply* r = (redisReply*)redisCommand(rc, "SCAN %s MATCH %b COUNT %d",
+                                                  cursor.c_str(),
+                                                  pattern.data(),
+                                                  (size_t)pattern.size(),
+                                                  200);
+        if (!r) return;
+        std::unique_ptr<redisReply, void(*)(void*)> guard(r, freeReplyObject);
+        if (r->type != REDIS_REPLY_ARRAY || r->elements < 2) return;
+
+        cursor = (r->element[0]->type == REDIS_REPLY_STRING)
+                 ? std::string(r->element[0]->str, r->element[0]->len)
+                 : "0";
+
+        auto* arr = r->element[1];
+        for (size_t i = 0; i < arr->elements; ++i) {
+            if (arr->element[i]->type != REDIS_REPLY_STRING) continue;
+            std::string key(arr->element[i]->str, arr->element[i]->len);
+            if (auto* r2 = (redisReply*)redisCommand(rc, "DEL %b", key.data(), (size_t)key.size()))
+                freeReplyObject(r2);
+        }
+
+        if (cursor == "0") break;
+    }
+}
+
 static long long get_ll(redisContext* rc, const std::string& cmd_fmt, const std::string& key) {
     redisReply* r = (redisReply*)redisCommand(rc, cmd_fmt.c_str(), key.c_str());
     if (!r) return 0;
@@ -296,6 +324,19 @@ static void debug_print_active_write_locks(redisContext* rc, const std::string& 
     }
 }
 
+static void clean_run_state(redisContext* rc, const std::string& ns) {
+    del(rc, ns + ":keys:set");
+    del(rc, ns + ":idx:lru");
+    del(rc, ns + ":idx:size");
+    del(rc, ns + ":idx:total");
+    del(rc, ns + ":purge:mutex");
+    del(rc, ns + ":evict:log");
+
+    del_matching(rc, ns + ":lock:write:*");
+    del_matching(rc, ns + ":lock:readers:*");
+    del_matching(rc, ns + ":lock:evict:*");
+}
+
 // ------------------ UPDATED MAIN ------------------
 int main(int argc, char** argv) {
     int processes = 4;
@@ -315,6 +356,7 @@ int main(int argc, char** argv) {
     bool debug = false;
     int  debug_every_ms = 2000;   // how often to print debug info
     int  debug_top = 10;          // how many items to show for LRU/sizes
+    bool clean_start = false;     // clear the Redis namespace before starting
 
     for (int i=1; i<argc; ++i) {
         if (!strcmp(argv[i], "--processes") && i+1<argc) processes = std::atoi(argv[++i]);
@@ -329,6 +371,7 @@ int main(int argc, char** argv) {
         else if (!strcmp(argv[i], "--write-sleep") && i+1<argc) write_sleep_ms = std::atoi(argv[++i]);
         else if (!strcmp(argv[i], "--key-suffix-chars") && i+1<argc) key_suffix_chars = std::atoi(argv[++i]);
         else if (!strcmp(argv[i], "--blocking")) blocking = true;
+        else if (!strcmp(argv[i], "--clean-start")) clean_start = true;
         else if (!strcmp(argv[i], "--max-bytes") && i+1<argc) max_bytes = std::atoll(argv[++i]);
         else if (!strcmp(argv[i], "--monitor-ms") && i+1<argc) monitor_every_ms = std::atoi(argv[++i]);
         else if (!strcmp(argv[i], "--debug")) debug = true;
@@ -342,17 +385,14 @@ int main(int argc, char** argv) {
     redisContext* rc = rc_connect(redis_host, redis_port, redis_db);
     if (!rc) return 1;
 
-    // Clean discovery set (so runs are independent)
+    if (clean_start) {
+        clean_run_state(rc, ns);
+    }
+
     const std::string keyset = ns + ":keys:set";
-    del(rc, keyset);
     const std::string z_lru = ns + ":idx:lru";
-    del(rc, z_lru);
     const std::string h_sizes = ns + ":idx:size";
-    del(rc, h_sizes);
     const std::string total_key = ns + ":idx:total";
-    del(rc, total_key);
-    const std::string evict_log_key = ns + ":evict:log";
-    del(rc, total_key);
 
     // Kludge for debugging; Single process version, else ... [rest of main]
     if (processes == 0) {
