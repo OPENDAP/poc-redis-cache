@@ -104,6 +104,6 @@ cd build/Cpp
 # The simulator makes entries that are between 200 and 4000 bytes (approximately). If we want about 1,000 objects,
 # set max bytes to about 2MB. 
 OPTIONS="--duration 300 --monitor-ms 10000 --blocking --read-sleep 20 --write-sleep 1000 --max-bytes 1000000"
-./build/RedisFileCacheLRU_Simulator $OPTIONS --redis-host "$REDIS_ENDPOINT" --redis-port 6379 --cache-dir "$MOUNT_POINT/poc-cache" > /opt/simulator.log 2>&1 &
+./RedisFileCacheLRU_Simulator $OPTIONS --redis-host "$REDIS_ENDPOINT" --redis-port 6379 --cache-dir "$MOUNT_POINT/poc-cache" > /opt/simulator.log 2>&1 &
     
 echo "=== userdata end $(date -Is) ==="
