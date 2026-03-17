@@ -5,28 +5,17 @@ export DEBIAN_FRONTEND=noninteractive
 # Log everything (even early failures)
 exec > >(tee -a /var/log/userdata.log) 2>&1
 
-REGION="${region:-us-west-2}"
-EFS_ID="${efs_id:-}"
-MOUNT_POINT="${mount_point:-poc_cache}"
-REPO_URL="${repo_url:-https://github.com/OPENDAP/poc-redis-cache.git}"
-REDIS_ENDPOINT="${redis_endpoint:-}"
-REDIS_MODE="${redis_mode-ec2}"
+REGION="${region}"
+EFS_ID="${efs_id}"
+MOUNT_POINT="${mount_point}"
+REPO_URL="${repo_url}"
+REDIS_ENDPOINT="${redis_endpoint}"
+REDIS_MODE="${redis_mode}"
 
-if test -z "$EFS_ID"
-then
-  echo "ERROR: EFS_ID is not set. Cannot continue."
-  exit 1
-fi
-
-if test -z "$REDIS_ENDPOINT"
-then
-  echo "ERROR: REDIS_ENDPOINT is not set. Cannot continue."
-  exit 1
-fi
 
 EFS_DNS="$EFS_ID.efs.$REGION.amazonaws.com"
 
-echo "=== userdata start $(date -Is) ==="
+echo "=== userdata start $$(date -Is) ==="
 echo "REGION=$REGION"
 echo "EFS_ID=$EFS_ID"
 echo "EFS_DNS=$EFS_DNS"
@@ -48,7 +37,8 @@ mkdir -p "$MOUNT_POINT"
 
 # Write fstab once (NO automount; just standard mount)
 FSTAB_LINE="$EFS_DNS:/ $MOUNT_POINT nfs4 nfsvers=4.1,_netdev,noresvport,timeo=60,retrans=2 0 0"
-if ! grep -qF "$EFS_DNS:/" /etc/fstab; then
+if ! grep -qF "$EFS_DNS:/" /etc/fstab
+then
   echo "$FSTAB_LINE" >> /etc/fstab
 fi
 
@@ -57,13 +47,15 @@ sleep 60
 
 # Keep trying the exact mount command until it works (up to ~1 minutes)
 for i in $(seq 1 300); do
-  if mountpoint -q "$MOUNT_POINT"; then
+  if mountpoint -q "$MOUNT_POINT"
+  then
     echo "EFS already mounted at $MOUNT_POINT"
     break
   fi
 
   echo "Attempt $i: mounting $EFS_DNS:/ to $MOUNT_POINT"
-  if mount -t nfs4 -o nfsvers=4.1,noresvport,timeo=60,retrans=2 "$EFS_DNS:/" "$MOUNT_POINT"; then
+  if mount -t nfs4 -o nfsvers=4.1,noresvport,timeo=60,retrans=2 "$EFS_DNS:/" "$MOUNT_POINT"
+  then
     echo "Mounted OK on attempt $i"
     break
   fi
@@ -73,7 +65,8 @@ for i in $(seq 1 300); do
   sleep 2
 done
 
-if ! mountpoint -q "$MOUNT_POINT"; then
+if ! mountpoint -q "$MOUNT_POINT"
+then
   echo "ERROR: EFS never mounted. Giving up."
   # Don't exit nonzero so instance still comes up for inspection
 else
@@ -133,4 +126,4 @@ cd build/Cpp
 OPTIONS="--duration 300 --monitor-ms 10000 --blocking --read-sleep 20 --write-sleep 1000 --max-bytes 1000000"
 ./RedisFileCacheLRU_Simulator "$OPTIONS" --redis-host "$REDIS_ENDPOINT" --redis-port 6379 --cache-dir "$MOUNT_POINT/poc-cache" > /opt/simulator.log 2>&1 &
     
-echo "=== userdata end $(date -Is) ==="
+echo "=== userdata end $$(date -Is) ==="
