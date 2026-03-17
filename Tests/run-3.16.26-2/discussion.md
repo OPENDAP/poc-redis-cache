@@ -102,6 +102,38 @@ That suggests:
 - write lock contention was effectively absent
 - the main anomaly was `W exist`
 
+The lone `other=1` came from the second worker summary in
+`simulator_0.log`:
+
+```text
+PID 4159 it=1668 R(ok/busy/miss)=1408/13/1 Rbytes=3045683 W(ok/busy/exist)=245/0/0 Wbytes=536337 other=1
+```
+
+In the simulator source, `other` is used as a catch-all for operations that do
+not fall into the expected categories:
+
+- writes that throw a non-`EEXIST` `std::system_error`
+- writes that throw a `std::runtime_error`, another `std::exception`, or an
+  unknown exception
+- reads that throw a non-`ENOENT` `std::system_error`
+- reads that throw any other unexpected exception
+
+Relevant source:
+
+- [Cpp/RedisFileCacheLRU_Simulator.cpp](/Users/jimg/src/opendap/hyrax/poc-redis-cache/Cpp/RedisFileCacheLRU_Simulator.cpp#L164)
+- [Cpp/RedisFileCacheLRU_Simulator.cpp](/Users/jimg/src/opendap/hyrax/poc-redis-cache/Cpp/RedisFileCacheLRU_Simulator.cpp#L198)
+
+There is one useful clue in the saved log: the write-side `other` paths print
+an explicit error message such as `Work write_bytes_create error: ...`, but no
+such message appears in the simulator logs for this run. That makes it most
+likely that the lone `other` came from an unexpected read-side failure rather
+than a write-side failure.
+
+The exact reason cannot be recovered from these saved logs, because the
+read-side `other` path increments the counter without printing the exception.
+So the best-supported conclusion is that one read operation failed in an
+unexpected way outside the normal `busy` and `miss` cases.
+
 ## Why `W exist` Is The Most Interesting Signal
 
 The simulator generates a new key like this:
