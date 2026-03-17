@@ -5,12 +5,12 @@ export DEBIAN_FRONTEND=noninteractive
 # Log everything (even early failures)
 exec > >(tee -a /var/log/userdata.log) 2>&1
 
-REGION="${region}"
-EFS_ID="${efs_id}"
-MOUNT_POINT="${mount_point}"
-REPO_URL="${repo_url}"
-REDIS_ENDPOINT="${redis_endpoint}"
-REDIS_MODE="${redis_mode}"
+REGION="${region:-us-west-2}"
+EFS_ID="${efs_id:-}"
+MOUNT_POINT="${mount_point:-poc_cache}"
+REPO_URL="${repo_url:-https://github.com/OPENDAP/poc-redis-cache.git}"
+REDIS_ENDPOINT="${redis_endpoint:-}"
+REDIS_MODE="${redis_mode-ec2}"
 
 EFS_DNS="$EFS_ID.efs.$REGION.amazonaws.com"
 
