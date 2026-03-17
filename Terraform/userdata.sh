@@ -75,8 +75,8 @@ mkdir -p /opt
 cd /opt
 if [ ! -d /opt/poc-redis-cache ]; then
   git clone "$REPO_URL" poc-redis-cache
-  # FIXME UNDO this hack. jhrg 3/16/26
-  git checkout jhrg/sim-bug-fix
+  # Switch to a branch here if needed. jhrg 3/16/26
+  # git checkout jhrg/sim-bug-fix
 fi
 chown -R ubuntu:ubuntu /opt/poc-redis-cache
 
@@ -106,8 +106,7 @@ if [ "$REDIS_MODE" = "ec2" ]; then
 fi
 
 # Build the C++ cache and test program
-# FIXME? This should be /opt/poc-redis-cache/ since the top level CMakeLists file is there. jhrg 3/16/26
-# cd /opt/poc-redis-cache/Cpp
+# This should be /opt/poc-redis-cache/ since the top level CMakeLists file is there. jhrg 3/16/26
 cd /opt/poc-redis-cache
 
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
