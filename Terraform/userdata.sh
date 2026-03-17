@@ -12,7 +12,7 @@ REPO_URL="${repo_url:-https://github.com/OPENDAP/poc-redis-cache.git}"
 REDIS_ENDPOINT="${redis_endpoint:-}"
 REDIS_MODE="${redis_mode-ec2}"
 
-if [ -z "$EFS_ID"]; then
+if [ -z "$EFS_ID" ]; then
   echo "ERROR: EFS_ID is not set. Cannot continue."
   exit 1
 fi
