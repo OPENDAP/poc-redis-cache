@@ -83,8 +83,4 @@ jobs:
           sudo apt-get install -y shellcheck
 
       - name: Lint userdata script
-        # The userdata.sh script uses defined env vars to pickup the parameter values.
-        # Added defaults in the normal way breaks terraform; not doing so causes shellcheck 
-        # to complain about undefined variables. Ignore those warnings. Unfortunately, 
-        # shellcheck doesn't support ignoring specific warnings for specific lines. jhrg 3/17/26
         run: shellcheck Terraform/userdata.sh
