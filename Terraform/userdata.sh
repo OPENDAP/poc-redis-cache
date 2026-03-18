@@ -1,15 +1,27 @@
 #!/bin/bash
+
 set -ueo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 # Log everything (even early failures)
 exec > >(tee -a /var/log/userdata.log) 2>&1
 
+# Terraform's templatefile() injects ${region}, ${efs_id}, and similar placeholders
+# before this script runs, so ShellCheck sees false positives for 'undefined variables.'
+# Disable those warnings for the injected variables. Unfortunately, shellcheck doesn't support
+# toggling specific warnings for ranges of lines; it's either the whole file of one line. jhrg 3/18/26
+
+# shellcheck disable=SC2154
 REGION="${region}"
+# shellcheck disable=SC2154
 EFS_ID="${efs_id}"
+# shellcheck disable=SC2154
 MOUNT_POINT="${mount_point}"
+# shellcheck disable=SC2154
 REPO_URL="${repo_url}"
+# shellcheck disable=SC2154
 REDIS_ENDPOINT="${redis_endpoint}"
+# shellcheck disable=SC2154
 REDIS_MODE="${redis_mode}"
 
 
