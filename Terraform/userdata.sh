@@ -1,20 +1,33 @@
 #!/bin/bash
-set -uox pipefail
+
+set -ueo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 # Log everything (even early failures)
 exec > >(tee -a /var/log/userdata.log) 2>&1
 
+# Terraform's templatefile() injects ${region}, ${efs_id}, and similar placeholders
+# before this script runs, so ShellCheck sees false positives for 'undefined variables.'
+# Disable those warnings for the injected variables. Unfortunately, shellcheck doesn't support
+# toggling specific warnings for ranges of lines; it's either the whole file of one line. jhrg 3/18/26
+
+# shellcheck disable=SC2154
 REGION="${region}"
+# shellcheck disable=SC2154
 EFS_ID="${efs_id}"
+# shellcheck disable=SC2154
 MOUNT_POINT="${mount_point}"
+# shellcheck disable=SC2154
 REPO_URL="${repo_url}"
+# shellcheck disable=SC2154
 REDIS_ENDPOINT="${redis_endpoint}"
+# shellcheck disable=SC2154
 REDIS_MODE="${redis_mode}"
+
 
 EFS_DNS="$EFS_ID.efs.$REGION.amazonaws.com"
 
-echo "=== userdata start $(date -Is) ==="
+echo "=== userdata start $$(date -Is) ==="
 echo "REGION=$REGION"
 echo "EFS_ID=$EFS_ID"
 echo "EFS_DNS=$EFS_DNS"
@@ -36,7 +49,8 @@ mkdir -p "$MOUNT_POINT"
 
 # Write fstab once (NO automount; just standard mount)
 FSTAB_LINE="$EFS_DNS:/ $MOUNT_POINT nfs4 nfsvers=4.1,_netdev,noresvport,timeo=60,retrans=2 0 0"
-if ! grep -qF "$EFS_DNS:/" /etc/fstab; then
+if ! grep -qF "$EFS_DNS:/" /etc/fstab
+then
   echo "$FSTAB_LINE" >> /etc/fstab
 fi
 
@@ -45,13 +59,15 @@ sleep 60
 
 # Keep trying the exact mount command until it works (up to ~1 minutes)
 for i in $(seq 1 300); do
-  if mountpoint -q "$MOUNT_POINT"; then
+  if mountpoint -q "$MOUNT_POINT"
+  then
     echo "EFS already mounted at $MOUNT_POINT"
     break
   fi
 
   echo "Attempt $i: mounting $EFS_DNS:/ to $MOUNT_POINT"
-  if mount -t nfs4 -o nfsvers=4.1,noresvport,timeo=60,retrans=2 "$EFS_DNS:/" "$MOUNT_POINT"; then
+  if mount -t nfs4 -o nfsvers=4.1,noresvport,timeo=60,retrans=2 "$EFS_DNS:/" "$MOUNT_POINT"
+  then
     echo "Mounted OK on attempt $i"
     break
   fi
@@ -61,7 +77,8 @@ for i in $(seq 1 300); do
   sleep 2
 done
 
-if ! mountpoint -q "$MOUNT_POINT"; then
+if ! mountpoint -q "$MOUNT_POINT"
+then
   echo "ERROR: EFS never mounted. Giving up."
   # Don't exit nonzero so instance still comes up for inspection
 else
@@ -119,6 +136,6 @@ cd build/Cpp
 # The simulator makes entries that are between 200 and 4000 bytes (approximately). If we want about 1,000 objects,
 # set max bytes to about 2MB. 
 OPTIONS="--duration 300 --monitor-ms 10000 --blocking --read-sleep 20 --write-sleep 1000 --max-bytes 1000000"
-./RedisFileCacheLRU_Simulator $OPTIONS --redis-host "$REDIS_ENDPOINT" --redis-port 6379 --cache-dir "$MOUNT_POINT/poc-cache" > /opt/simulator.log 2>&1 &
+./RedisFileCacheLRU_Simulator "$OPTIONS" --redis-host "$REDIS_ENDPOINT" --redis-port 6379 --cache-dir "$MOUNT_POINT/poc-cache" > /opt/simulator.log 2>&1 &
     
-echo "=== userdata end $(date -Is) ==="
+echo "=== userdata end $$(date -Is) ==="

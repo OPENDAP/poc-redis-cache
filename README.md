@@ -58,3 +58,15 @@ set
 ## Python code and C++ code
 
 See the subdirectories for those.
+
+## CI
+
+GitHub Actions pull request CI now validates the active code paths in this repo:
+
+- C++ configure/build with CMake
+- Redis-backed CppUnit tests via `ctest`
+- Terraform `fmt -check`, `init -backend=false`, and `validate`
+- `shellcheck` for `Terraform/userdata.sh`
+
+The C++ workflow starts a local Redis server and clears it with `redis-cli FLUSHALL`
+before running tests so CI begins from a clean Redis state.
