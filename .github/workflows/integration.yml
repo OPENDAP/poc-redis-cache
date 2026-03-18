@@ -120,9 +120,6 @@ jobs:
     # since it depends on the Terraform configuration being valid. jhrg 3/18/26
     needs:
       - terraform-validate
-    # only run this job if AWS credentials are available, either via a role to 
-    # assume or access keys. jhrg 3/18/26
-    if: ${{ secrets.AWS_ROLE_TO_ASSUME != '' || secrets.AWS_ACCESS_KEY_ID != '' }}
     # Permission for this job. It can read the local repo and write an OIDC token 
     # if using a role to assume. The 'write' permission does not mean the job can
     # write to the repository. jhrg 3/18/26
@@ -144,15 +141,44 @@ jobs:
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
 
+      # This baroque step is necessary to support both OIDC-based credential configuration
+      # (for security best practices) and traditional access key configuration (for 
+      # compatibility with existing setups). It detects which method of AWS credential 
+      # configuration is available based on the presence of specific secrets and sets output
+      # variables accordingly. Subsequent steps can then conditionally execute based on these
+      # outputs to configure AWS credentials properly for the Terraform plan.
+      #
+      # Why not 'just use and if:'? Because GitHub Actions does not support using 
+      # ${{ secrets.... }} in 'if conditions.' Grrrr jhrg 3/18/26
+      - name: Detect AWS credential configuration
+        id: aws-auth
+        env:
+          AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        run: |
+          if [ -n "$AWS_ROLE_TO_ASSUME" ]; then
+            echo "has_credentials=true" >> "$GITHUB_OUTPUT"
+            echo "use_oidc=true" >> "$GITHUB_OUTPUT"
+            echo "use_access_keys=false" >> "$GITHUB_OUTPUT"
+          elif [ -n "$AWS_ACCESS_KEY_ID" ]; then
+            echo "has_credentials=true" >> "$GITHUB_OUTPUT"
+            echo "use_oidc=false" >> "$GITHUB_OUTPUT"
+            echo "use_access_keys=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_credentials=false" >> "$GITHUB_OUTPUT"
+            echo "use_oidc=false" >> "$GITHUB_OUTPUT"
+            echo "use_access_keys=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Configure AWS credentials with OIDC (OpenID Connect)
-        if: ${{ secrets.AWS_ROLE_TO_ASSUME != '' }}
+        if: steps.aws-auth.outputs.use_oidc == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Configure AWS credentials with access keys
-        if: ${{ secrets.AWS_ROLE_TO_ASSUME == '' && secrets.AWS_ACCESS_KEY_ID != '' }}
+        if: steps.aws-auth.outputs.use_access_keys == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -160,15 +186,22 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Skip Terraform plan when AWS credentials are unavailable
+        if: steps.aws-auth.outputs.has_credentials != 'true'
+        run: echo "Skipping terraform plan because AWS credentials are not configured."
+
       - name: Initialize Terraform
+        if: steps.aws-auth.outputs.has_credentials == 'true'
         run: terraform init
 
       - name: Create Terraform plan artifact
+        if: steps.aws-auth.outputs.has_credentials == 'true'
         run: |
           terraform plan -out=tfplan
           terraform show -no-color tfplan > tfplan.txt
 
       - name: Upload Terraform plan artifact
+        if: steps.aws-auth.outputs.has_credentials == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: terraform-plan
