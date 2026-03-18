@@ -17,6 +17,7 @@ These instructions apply to the entire `poc-redis-cache` repository.
 - Do not rewrite nearby files just for style consistency.
 - Do not revert unrelated local changes in a dirty worktree.
 - If you find conflicting user edits in files you need to change, stop and ask before overwriting them.
+- Only make changes on a branch, never 'main.'
 
 ## C++ Guidance
 

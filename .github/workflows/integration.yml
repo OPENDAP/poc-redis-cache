@@ -1,0 +1,178 @@
+name: Main Integration
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  cpp-build-and-test:
+    name: C++ Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install C++ and Redis dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            libcppunit-dev \
+            libhiredis-dev \
+            redis-server
+
+      - name: Start Redis
+        run: |
+          sudo systemctl start redis-server
+          redis-cli ping
+
+      - name: Clean Redis state for tests
+        run: redis-cli FLUSHALL
+
+      - name: Configure CMake
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build active C++ targets
+        run: cmake --build build -j2
+
+      - name: Run CTest and capture logs
+        env:
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: "6379"
+          REDIS_DB: "0"
+        run: |
+          mkdir -p artifacts
+          set -o pipefail
+          ctest --test-dir build --output-on-failure | tee artifacts/ctest-output.log
+
+      - name: Collect CTest files
+        # If: always() ensures this step runs even if the previous step fails, so we 
+        # can collect logs and artifacts for debugging. jhrg 3/18/26
+        if: always()
+        run: |
+          mkdir -p artifacts
+          if [ -f build/Testing/Temporary/LastTest.log ]; then
+            cp build/Testing/Temporary/LastTest.log artifacts/
+          fi
+          if [ -d build/Testing/Temporary ]; then
+            find build/Testing/Temporary -maxdepth 1 -type f -name '*.log' -print -exec cp {} artifacts/ \;
+          fi
+
+      - name: Upload C++ test artifacts
+        # This will upload the 'artifacts' to the GitHub Actions artifact storage Limited to 500MB. jhrg 3/18/26
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpp-test-artifacts
+          path: artifacts/
+          if-no-files-found: warn
+
+  terraform-validate:
+    name: Terraform Validate
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: Terraform
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Check Terraform formatting
+        run: terraform fmt -check
+
+      - name: Initialize Terraform without backend
+        run: terraform init -backend=false
+
+      - name: Validate Terraform
+        run: terraform validate
+
+  shellcheck-userdata:
+    name: Shellcheck userdata
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Lint userdata script
+        run: shellcheck Terraform/userdata.sh
+
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    # Wait for terraform-validate to complete before running terraform-plan, 
+    # since it depends on the Terraform configuration being valid. jhrg 3/18/26
+    needs:
+      - terraform-validate
+    # only run this job if AWS credentials are available, either via a role to 
+    # assume or access keys. jhrg 3/18/26
+    if: ${{ secrets.AWS_ROLE_TO_ASSUME != '' || secrets.AWS_ACCESS_KEY_ID != '' }}
+    # Permission for this job. It can read the local repo and write an OIDC token 
+    # if using a role to assume. The 'write' permission does not mean the job can
+    # write to the repository. jhrg 3/18/26
+    permissions:
+      contents: read
+      id-token: write
+
+    defaults:
+      run:
+        working-directory: Terraform
+
+    env:
+      AWS_REGION: us-west-2
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS credentials with OIDC (OpenID Connect)
+        if: ${{ secrets.AWS_ROLE_TO_ASSUME != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS credentials with access keys
+        if: ${{ secrets.AWS_ROLE_TO_ASSUME == '' && secrets.AWS_ACCESS_KEY_ID != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Initialize Terraform
+        run: terraform init
+
+      - name: Create Terraform plan artifact
+        run: |
+          terraform plan -out=tfplan
+          terraform show -no-color tfplan > tfplan.txt
+
+      - name: Upload Terraform plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: |
+            Terraform/tfplan
+            Terraform/tfplan.txt
+          if-no-files-found: error

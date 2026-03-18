@@ -70,3 +70,7 @@ GitHub Actions pull request CI now validates the active code paths in this repo:
 
 The C++ workflow starts a local Redis server and clears it with `redis-cli FLUSHALL`
 before running tests so CI begins from a clean Redis state.
+
+Pushes to `main` also run a separate GitHub Actions integration workflow that repeats
+those checks, uploads CTest logs as artifacts, and can publish a Terraform plan artifact
+when AWS credentials are configured in the repository environment.
