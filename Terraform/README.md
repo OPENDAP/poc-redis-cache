@@ -1,3 +1,84 @@
+# Overview
+
+This project demonstrates a **distributed file cache system** on AWS using:
+
+- **EFS (Elastic File System)** → shared storage layer  
+- **Redis (EC2)** → coordination, metadata, and locking  
+- **EC2 worker nodes** → simulate distributed clients  
+- **Terraform** → infrastructure provisioning  
+- **C++ simulator (OPeNDAP)** → cache implementation + workload generator  
+
+The goal is to evaluate how a **Redis-coordinated cache control system** performs under concurrent, multi-node access to shared storage.
+
+## Components
+
+### Terraform (Infrastructure)
+
+Terraform provisions:
+
+- VPC with DNS enabled  
+- Subnets and routing  
+- Security groups  
+- EFS filesystem + mount targets  
+- Redis EC2 instance  
+- Worker EC2 instances
+
+### EC2 Roles
+
+#### Redis Node
+- Runs `redis-server`
+- Stores:
+  - cache metadata
+  - LRU index
+  - lock state
+
+#### Worker Nodes
+Each worker:
+- mounts EFS at `/mnt/shared`
+- builds the C++ simulator
+- runs concurrent cache workloads
+- communicates with Redis
+
+### EFS (Shared Storage)
+- Mounted on all workers:
+/mnt/shared
+- Cache directory:
+/mnt/shared/poc-cache
+- Provides shared, persistent storage across all nodes
+
+### Redis (Layer)
+Redis acts as a **control plane**, not a data store.
+Responsibilities:
+- metadata tracking
+- LRU indexing
+- distributed locking
+- cache size accounting
+
+## RedisFileCacheLRU Integration
+- file reads/writes to EFS
+- Redis-based coordination
+- LRU eviction
+- concurrency control
+
+### Cache Operations
+
+#### Write
+1. Acquire lock (Redis)
+2. Write file to EFS
+3. Update metadata + LRU
+4. Release lock
+
+#### Read
+1. Select key
+2. Read from EFS
+3. Update LRU
+
+That is the basic overview of what the Terraform - Redis cache is implementing. The following section shows how to implement and run the described distributed file caching system.
+
+
+---
+
+
 # AWS Testbed for OPeNDAP Redis Cache PoC
 
 This is a minimal Terraform stack that'll spin up a small cluster that mirrors your PoC architecture. This version fixes HCL block formatting to work with Terraform v1.14+.:
