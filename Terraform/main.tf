@@ -199,7 +199,8 @@ resource "aws_instance" "redis" {
   instance_type               = "t3.micro"
   subnet_id                   = aws_subnet.public[0].id
   vpc_security_group_ids      = [aws_security_group.redis.id]
-  associate_public_ip_address = true
+  # If working with SIT/UAT/etc. Set this to false and place workers in SIT/UAT/etc. private subnets
+  associate_public_ip_address = false
   key_name                    = var.key_name
   user_data                   = <<-EOF
     #!/bin/bash
@@ -217,7 +218,7 @@ resource "aws_instance" "worker" {
   count                       = var.worker_count
   ami                         = data.aws_ami.ubuntu.id
   instance_type               = var.instance_type
-  subnet_id                   = aws_subnet.public[count.index % length(aws_subnet.public)].id
+  subnet_id                   = var.subnet_ids[count.index % length(var.subnet_ids)]
   vpc_security_group_ids      = [aws_security_group.workers.id]
   associate_public_ip_address = true
   key_name                    = var.key_name

@@ -1,0 +1,14 @@
+region       = "us-west-2"
+worker_count = 10
+
+create_vpc = false
+vpc_id     = "vpc-xxxxxxxx"
+subnet_ids = [
+  "subnet-aaaaaaaa",
+  "subnet-bbbbbbbb"
+]
+
+redis_mode      = "external"
+redis_endpoint  = "10.x.x.x"
+efs_dns         = "fs-xxxxxxxx.efs.us-west-2.amazonaws.com"
+mount_point     = "/mnt/shared"

@@ -32,6 +32,22 @@ variable "vpc_cidr" {
   default = "10.42.0.0/16"
 }
 
+# Added for SIT testing
+variable "vpc_id" {
+  type = string
+}
+variable "subnet_ids" {
+  type = list(string)
+}
+variable "create_vpc" {
+  type    = bool
+  default = true
+}
+variable "external_redis_endpoint" {
+  type    = string
+  default = ""
+}
+
 # Number of workers to launch
 variable "worker_count" {
   type    = number
