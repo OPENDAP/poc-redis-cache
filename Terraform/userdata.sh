@@ -124,8 +124,8 @@ if [ "$REDIS_MODE" = "ec2" ]; then
 fi
 
 # Build the C++ cache and test program
-# This should be /opt/poc-redis-cache/ since the top level CMakeLists file is there. jhrg 3/16/26
-cd /opt/poc-redis-cache
+# This should be /opt/poc-redis-cache/Cpp so that we can run CMake and build there. kln 8/14/26
+cd /opt/poc-redis-cache/Cpp
 
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
