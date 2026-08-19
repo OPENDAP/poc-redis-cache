@@ -197,9 +197,13 @@ int worker(const std::string& cache_dir,
                 ++rb;
             } catch (const std::system_error& se) {
                 if (se.code().value() == ENOENT) { ++rm; srem(rc, keyset, key); }
-                else ++other;
+                else {
+                    ++other;
+                    std::cerr << "Read error: " << se.code().value() << '\n';
+                }
             } catch (...) {
                 ++other;
+                std::cerr << "Read error but it's unknown...\n";
             }
             ms_sleep(read_sleep_ms);
         }
