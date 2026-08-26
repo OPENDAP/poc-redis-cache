@@ -100,6 +100,7 @@ private:
     bool can_evict_now(const std::string& key) const;
 
     std::string k_evict_fence(const std::string& key) const { return k_evict_fence_ + key; };
+    void clear_evict_fence(const std::string& key) const noexcept;
 
     static long long now_ms();
     void touch_lru(const std::string& key, long long ts_ms) const;

@@ -17,6 +17,7 @@ These instructions apply to the entire `poc-redis-cache` repository.
 - Do not rewrite nearby files just for style consistency.
 - Do not revert unrelated local changes in a dirty worktree.
 - If you find conflicting user edits in files you need to change, stop and ask before overwriting them.
+- For any change or plan development, log the actions to be performed in a markdown document named <name>-log.md in the `docs` directory and include a date-time stamp and the prompt that lead to the action
 
 ## C++ Guidance
 

@@ -187,7 +187,12 @@ int worker(const std::string& cache_dir,
                     if (cache.read_bytes_blocking(key, s, std::chrono::milliseconds(1000))) {
                         ++ro; rbytes += (long)s.size();
                     } else {
-                        ++rb; // timed out due to writer/evict fence
+                        // timed out; could be sustained lock/evict-fence contention or the
+                        // key having been evicted underneath us. Drop it from the discovery
+                        // set so a since-evicted key doesn't keep getting re-picked and
+                        // re-timing-out on every subsequent read.
+                        ++rb;
+                        srem(rc, keyset, key);
                     }
                 } else {
                     auto s = cache.read_bytes(key);

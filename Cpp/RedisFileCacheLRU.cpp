@@ -60,8 +60,9 @@ std::string RedisFileCache::k_readers(const std::string& key) const {
 
 // ------- Lua sources -------
 static const char* LUA_READ_LOCK_ACQUIRE = R"(
-    local wl = KEYS[1]; local rd = KEYS[2]; local ttl = tonumber(ARGV[1])
+    local wl = KEYS[1]; local rd = KEYS[2]; local ev = KEYS[3]; local ttl = tonumber(ARGV[1])
     if redis.call('EXISTS', wl) == 1 then return 0 end
+    if redis.call('EXISTS', ev) == 1 then return 0 end
     local c = redis.call('INCR', rd); redis.call('PEXPIRE', rd, ttl); return 1
 )";
 static const char* LUA_READ_LOCK_RELEASE = R"(
@@ -69,8 +70,9 @@ static const char* LUA_READ_LOCK_RELEASE = R"(
     if c <= 0 then redis.call('DEL', rd) end; return 1
 )";
 static const char* LUA_WRITE_LOCK_ACQUIRE = R"(
-    local wl = KEYS[1]; local rd = KEYS[2]; local token = ARGV[1]; local ttl = tonumber(ARGV[2])
+    local wl = KEYS[1]; local rd = KEYS[2]; local ev = KEYS[3]; local token = ARGV[1]; local ttl = tonumber(ARGV[2])
     if redis.call('EXISTS', wl) == 1 then return 0 end
+    if redis.call('EXISTS', ev) == 1 then return 0 end
     local rc = tonumber(redis.call('GET', rd) or "0"); if rc > 0 then return -1 end
     local ok = redis.call('SET', wl, token, 'NX', 'PX', ttl); if ok then return 1 else return 0 end
 )";
@@ -199,9 +201,9 @@ std::string RedisFileCache::cmd_s(const char* fmt, ...) const {
 // ------- locking -------
 // read acquire
 void RedisFileCache::acquire_read(const std::string& key) const {
-    std::vector<std::string> KEYS{ k_write(key), k_readers(key) };
+    std::vector<std::string> KEYS{ k_write(key), k_readers(key), k_evict_fence(key) };
     std::vector<std::string> ARGV{ std::to_string(ttl_ms_) };
-    auto res = scripts_->evalsha_ll("read_acq", 2, KEYS, ARGV);
+    auto res = scripts_->evalsha_ll("read_acq", 3, KEYS, ARGV);
     if (res != 1) throw CacheBusyError("read lock blocked by writer");
 }
 
@@ -223,9 +225,9 @@ std::string RedisFileCache::acquire_write(const std::string& key) const {
        <<std::setw(16)<<std::setfill('0')<<b;
     std::string token = oss.str();
 
-    std::vector<std::string> KEYS{ k_write(key), k_readers(key) };
+    std::vector<std::string> KEYS{ k_write(key), k_readers(key), k_evict_fence(key) };
     std::vector<std::string> ARGV{ token, std::to_string(ttl_ms_) };
-    auto res = scripts_->evalsha_ll("write_acq", 2, KEYS, ARGV);
+    auto res = scripts_->evalsha_ll("write_acq", 3, KEYS, ARGV);
     if (res == 0)  throw CacheBusyError("writer lock held");
     if (res == -1) throw CacheBusyError("readers present");
     return token;
@@ -246,6 +248,16 @@ bool RedisFileCache::can_evict_now(const std::string& key) const {
     return res == 1;
 }
 
+// Clears the eviction fence set by can_evict_now(), once the evictor is
+// done with the key, so admission is blocked only for as long as the
+// unlink + index update actually take rather than the full fence TTL.
+void RedisFileCache::clear_evict_fence(const std::string& key) const noexcept {
+    try {
+        const auto fence = k_evict_fence(key);
+        cmd_ll("DEL %b", fence.data(), (size_t)fence.size());
+    } catch (...) {}
+}
+
 // ------- public API -------
 bool RedisFileCache::exists(const std::string& key) const {
     validate_key(key);
@@ -261,7 +273,6 @@ std::string RedisFileCache::read_bytes(const std::string& key) const {
         fd = ::open(p.c_str(), O_RDONLY);
         if (fd < 0) {
             int e = errno;
-            release_read(key);
             if (e == ENOENT) throw std::system_error(e, std::generic_category(), "FileNotFound");
             throw std::system_error(e, std::generic_category(), "open read");
         }
@@ -272,7 +283,6 @@ std::string RedisFileCache::read_bytes(const std::string& key) const {
         while ((n = ::read(fd, buf, CH)) > 0) out.append(buf, buf+n);
         if (n < 0) {
             int e = errno;
-            ::close(fd); release_read(key);
             throw std::system_error(e, std::generic_category(), "read");
         }
         ::close(fd); release_read(key);
@@ -431,6 +441,7 @@ bool RedisFileCache::try_evict_one(std::string& victim, long long& freed) {
     if (::unlink(p.c_str()) != 0) {
         // file already gone? clean indexes
         index_remove_on_delete(key, sz);
+        clear_evict_fence(key);
         return false;
     }
 
@@ -440,6 +451,7 @@ bool RedisFileCache::try_evict_one(std::string& victim, long long& freed) {
     freed = sz;
 
     cmd_ll("LPUSH %s:evict:log %b", ns_.c_str(), key.data(), (size_t)key.size());
+    clear_evict_fence(key);
 
     return true;
 }
