@@ -199,7 +199,7 @@ int worker(const std::string& cache_dir,
                 if (se.code().value() == ENOENT) { ++rm; srem(rc, keyset, key); }
                 else {
                     ++other;
-                    std::cerr << "Read error: " << se.code().value() << '\n';
+                    std::cerr << "Read error: " << se.code().value() << ": " << se.code().message() << '\n';
                 }
             } catch (...) {
                 ++other;

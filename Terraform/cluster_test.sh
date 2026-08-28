@@ -3,7 +3,7 @@
 set -u
 
 DURATION=120
-PROCESSES=4
+PROCESSES=15
 NAMESPACE="cluster-test"
 MAX_BYTES=1000000
 SSH_USER="ubuntu"
@@ -33,10 +33,10 @@ timeout 180 ./build/RedisFileCacheLRU_Simulator \
     --namespace "$NAMESPACE" \
     --blocking \
     --max-bytes $MAX_BYTES \
-    > /home/ubuntu/cache-test-logs/simulator.log 2>&1
+    > /home/ubuntu/cache-test-logs/$NAMESPACE.log 2>&1
 
 STATUS=\$?
-echo "Simulator exit status: \$STATUS" >> /home/ubuntu/cache-test-logs/simulator.log
+echo "Simulator exit status: \$STATUS" >> /home/ubuntu/cache-test-logs/$NAMESPACE.log
 
 EOF
   ((i++))
@@ -52,7 +52,7 @@ for WORKER in $WORKERS; do
   printf "    Worker $i: $WORKER"
 
   ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$SSH_USER@$WORKER" \
-    "grep 'PID ' /home/ubuntu/cache-test-logs/simulator.log | sed 's/^.*PID /PID /' || printf 'No PID results found'"
+    "grep 'PID ' /home/ubuntu/cache-test-logs/$NAMESPACE.log | sed 's/^.*PID /PID /' || printf 'No PID results found'"
 
   ((i++))
 done
